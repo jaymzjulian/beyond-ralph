@@ -470,20 +470,105 @@ class TestSessionManager:
 
 **NO AGENT IS TRUSTED. EVERY AGENT MUST BE VALIDATED BY ANOTHER AGENT.**
 
+**THREE separate agents for every implementation:**
+
 ```
-Coding Agent                    Validation Agent
-     │                               │
-     │ implements feature            │
-     │                               │
-     │ ─────────────────────────────>│
-     │    "I completed task X"       │
-     │                               │ validates implementation
-     │                               │ runs independent tests
-     │                               │ provides EVIDENCE
-     │<─────────────────────────────│
-     │   evidence document           │
-     │                               │
-Orchestrator validates evidence (NOT the coding agent)
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  CODING AGENT   │     │ TESTING AGENT   │     │ REVIEW AGENT    │
+│  (Implements)   │     │ (Validates)     │     │ (Reviews Code)  │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │
+         │ implements feature    │                       │
+         │                       │                       │
+         │──────────────────────>│                       │
+         │                       │ runs tests            │
+         │                       │ provides evidence     │
+         │                       │                       │
+         │                       │──────────────────────>│
+         │                       │                       │ linting
+         │                       │                       │ security scan
+         │                       │                       │ best practices
+         │                       │                       │ OWASP checks
+         │<──────────────────────────────────────────────│
+         │        review items (MUST be actioned)        │
+         │                       │                       │
+         │ fixes ALL items       │                       │
+         │──────────────────────>│──────────────────────>│
+         │                       │                       │
+         └───────── REPEAT UNTIL REVIEW PASSES ─────────┘
+```
+
+### The Three Agents
+
+| Agent | Role | Tools |
+|-------|------|-------|
+| **Coding Agent** | Implements features, fixes review items | IDE, git |
+| **Testing Agent** | Runs tests, validates functionality | pytest, playwright, etc. |
+| **Review Agent** | Code quality, security, best practices | Linters, SAST, Semgrep |
+
+### Review Agent Responsibilities (MANDATORY)
+
+The Code Review Agent MUST check:
+
+1. **Linting** (language-specific):
+   - Python: ruff, mypy (strict types)
+   - JavaScript/TypeScript: eslint, tsc
+   - Go: golint, go vet
+   - Rust: clippy
+   - *Any language*: discover and use appropriate linter
+
+2. **Security (OWASP/SAST)**:
+   - Semgrep with security rulesets
+   - Bandit (Python security)
+   - Snyk or similar for dependencies
+   - OWASP Top 10 checks
+   - Secrets detection (no hardcoded keys/passwords)
+
+3. **Best Practices**:
+   - Code complexity (cyclomatic complexity)
+   - DRY violations (duplicate code)
+   - SOLID principles
+   - Error handling patterns
+   - Input validation
+   - Output encoding
+
+4. **Documentation**:
+   - Public APIs have docstrings
+   - Complex logic is commented
+   - README updated if needed
+
+### Coder Agent MUST Action ALL Review Items
+
+**This is NON-NEGOTIABLE.** The Coding Agent:
+- Receives review feedback
+- MUST fix EVERY item flagged
+- Cannot argue or dismiss items
+- Must resubmit for re-review
+- Loop continues until Review Agent approves
+
+```
+[AGENT:review-abc] Review complete. 7 items found:
+  1. SECURITY: SQL injection risk at db.py:45
+  2. SECURITY: Hardcoded API key at config.py:12
+  3. LINT: Missing type hints in utils.py
+  4. LINT: Unused import at main.py:3
+  5. PRACTICE: Duplicate code in handlers.py:20-35 and helpers.py:10-25
+  6. PRACTICE: No input validation in process_user_data()
+  7. DOCS: Public function missing docstring at api.py:78
+
+[BEYOND-RALPH] Routing to Coding Agent for fixes...
+
+[AGENT:code-xyz] Fixing all 7 items...
+[AGENT:code-xyz] Fixed: SQL injection (parameterized queries)
+[AGENT:code-xyz] Fixed: Moved API key to environment variable
+[AGENT:code-xyz] Fixed: Added type hints
+[AGENT:code-xyz] Fixed: Removed unused import
+[AGENT:code-xyz] Fixed: Extracted duplicate code to shared function
+[AGENT:code-xyz] Fixed: Added input validation
+[AGENT:code-xyz] Fixed: Added docstring
+[AGENT:code-xyz] Resubmitting for review...
+
+[AGENT:review-abc] Re-review complete. 0 items found. APPROVED.
 ```
 
 ### Evidence Requirements

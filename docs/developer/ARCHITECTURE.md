@@ -380,6 +380,55 @@ If `safemode=true` in config:
 - For users who DON'T have contained environments
 - Default is `safemode=false`
 
+## Three-Agent Trust Model
+
+Every implementation requires THREE separate agents:
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   CODING    │───>│   TESTING   │───>│   REVIEW    │
+│   AGENT     │    │   AGENT     │    │   AGENT     │
+└─────────────┘    └─────────────┘    └─────────────┘
+       ▲                                    │
+       │                                    │
+       └────────── MUST FIX ALL ────────────┘
+```
+
+### Agent Responsibilities
+
+| Agent | What it Does | Tools |
+|-------|-------------|-------|
+| Coding Agent | Implements features, fixes ALL review items | Language tools, git |
+| Testing Agent | Validates functionality, provides evidence | pytest, playwright, etc. |
+| Review Agent | Linting, security, best practices | Semgrep, Bandit, ruff, etc. |
+
+### Review Agent is NON-NEGOTIABLE
+
+The Review Agent checks:
+1. **Linting**: ruff, eslint, golint, clippy (per language)
+2. **Types**: mypy, tsc (strict mode)
+3. **Security**: Semgrep (OWASP rules), Bandit, detect-secrets
+4. **Dependencies**: Safety, npm audit, cargo audit
+5. **Complexity**: Radon (cyclomatic complexity)
+6. **Dead Code**: Vulture
+7. **Best Practices**: Error handling, input validation, DRY
+
+**Coding Agent MUST fix every item.** No exceptions. No dismissals.
+
+### The Fix Loop
+
+```
+1. Coding Agent implements
+2. Testing Agent validates → provides evidence
+3. Review Agent reviews → finds 7 issues
+4. Coding Agent fixes ALL 7 issues
+5. Testing Agent re-validates
+6. Review Agent re-reviews → finds 0 issues
+7. PASSED ✅
+```
+
+This loop continues until Review Agent approves with 0 must-fix items.
+
 ## Security Considerations
 
 1. **Contained environment assumed**: User runs in isolated environment
@@ -388,6 +437,7 @@ If `safemode=true` in config:
 4. **Agent isolation**: Agents can't access each other's sessions directly
 5. **Knowledge base validation**: Prevent injection via knowledge entries
 6. **Quota enforcement**: Prevent runaway resource usage
+7. **Three-agent trust**: No agent is trusted, all work is validated
 
 ## Implementation Priorities
 

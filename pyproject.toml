@@ -46,6 +46,14 @@ dependencies = [
     # Research capabilities
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
+
+    # Code Review Agent - Linting & Security
+    "semgrep>=1.50",         # Multi-language security rules
+    "bandit>=1.7",           # Python security linter
+    "safety>=2.3",           # Dependency vulnerability checker
+    "vulture>=2.10",         # Dead code detection
+    "radon>=6.0",            # Code complexity metrics
+    "detect-secrets>=1.4",   # Secrets detection
 ]
 
 [project.optional-dependencies]
