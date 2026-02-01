@@ -523,6 +523,52 @@ async def on_compaction():
 
 This prevents the orchestrator from "going off track" after losing context.
 
+## Dynamic Project Plan - CRITICAL
+
+**The project plan is a LIVING DOCUMENT that modules can update.**
+
+### Modules Can Add Requirements
+
+When a module discovers it needs something from another module:
+- **Add the requirement to the project plan** (no user input needed)
+- **Simple technical requirements only** (e.g., "this connection function should exist")
+- **Orchestrator sees the update** and schedules the work
+- **The providing module must deliver**
+
+```
+[AGENT:auth-module] I need a database connection pool from the db module.
+[AGENT:auth-module] Updating PROJECT_PLAN.md: Added requirement to db module
+[ORCHESTRATOR] Detected new requirement: db module must provide connection pool
+[ORCHESTRATOR] Scheduling db module enhancement...
+[AGENT:db-module] Implementing connection pool as requested by auth module
+```
+
+### Modules MUST Call Out Failures
+
+When a module doesn't deliver what was promised:
+- **Aggressively report the failure**
+- **Demand it be fixed**
+- **Update project plan with the discrepancy**
+- **Do NOT silently work around it**
+
+```
+[AGENT:api-module] ERROR: db module promised get_user() but it doesn't exist!
+[AGENT:api-module] Updating PROJECT_PLAN.md: db module FAILED to deliver get_user()
+[AGENT:api-module] Demanding fix before I can proceed.
+[ORCHESTRATOR] Detected failure: db module missing promised function
+[ORCHESTRATOR] Returning to db module implementation with new requirement
+[AGENT:db-module] Implementing get_user() as required by api module
+```
+
+### Dynamic Requirements Rules
+
+1. **No user input required** - only technical requirements between modules
+2. **Must be specific** - "I need function X that does Y" not "I need something"
+3. **Must update PROJECT_PLAN.md** - formal record of the requirement
+4. **Orchestrator mediates** - sees updates, schedules work
+5. **Aggressive accountability** - call out failures, don't work around them
+6. **Plan is never static** - expect it to evolve during implementation
+
 ## Agent Trust Model - CRITICAL
 
 **NO AGENT IS TRUSTED. EVERY AGENT MUST BE VALIDATED BY ANOTHER AGENT.**

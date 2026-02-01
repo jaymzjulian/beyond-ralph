@@ -166,6 +166,29 @@ When the orchestrator experiences a compaction event:
 
 This prevents the orchestrator from "going off track" after losing context.
 
+## Dynamic Project Plan (CRITICAL)
+
+| Decision | Choice |
+|----------|--------|
+| Plan mutability | LIVING document - modules can update |
+| Inter-module requirements | Modules can add requirements to other modules |
+| User input for updates | NOT required for technical requirements |
+| Failure handling | AGGRESSIVELY call out, demand fixes |
+| Workarounds | FORBIDDEN - fix the source, don't work around |
+
+### What Modules Can Do
+
+1. **Add requirements**: "I need db module to provide get_user()"
+2. **Call out failures**: "db module promised X but didn't deliver"
+3. **Demand fixes**: "Cannot proceed until db module delivers"
+4. **Update plan**: Formally record new requirements and discrepancies
+
+### What Modules Cannot Do
+
+1. Request requirements that need user input
+2. Silently work around missing functionality
+3. Accept broken promises from other modules
+
 ## Implementation Notes
 
 1. **Windows support is first-class** - not just WSL2, native Windows with full package manager support

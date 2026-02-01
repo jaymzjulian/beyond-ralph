@@ -128,6 +128,16 @@ Every item from SPEC.md must be implemented. Use this checklist:
 - [ ] On compaction: MUST check recent knowledge base entries
 - [ ] Orchestrator stays lean - only coordinates, never implements
 
+### Dynamic Project Plan (CRITICAL - from conversation)
+- [ ] Modules CAN add requirements to other modules
+- [ ] Requirements must be technical (no user input needed)
+- [ ] Modules MUST update PROJECT_PLAN.md with new requirements
+- [ ] Orchestrator detects updates and schedules work
+- [ ] Modules MUST aggressively call out when others fail to deliver
+- [ ] Modules MUST demand fixes (not silently work around)
+- [ ] Project plan is LIVING document, expect evolution
+- [ ] Discrepancies between promised and delivered must be recorded
+
 ---
 
 ## IMPLEMENTATION PHASES
