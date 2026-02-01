@@ -119,6 +119,15 @@ Every item from SPEC.md must be implemented. Use this checklist:
 - [ ] Code Review Agent is mandatory (linting, security, best practices)
 - [ ] Coding Agent MUST action ALL review items (no dismissals)
 
+### Context Management (CRITICAL - from conversation)
+- [ ] Orchestrator MINIMIZES context usage
+- [ ] Delegate to agents AGGRESSIVELY to avoid compaction
+- [ ] On compaction: MUST re-read PROJECT_PLAN.md
+- [ ] On compaction: MUST re-read current module specs
+- [ ] On compaction: MUST re-read task status from records/
+- [ ] On compaction: MUST check recent knowledge base entries
+- [ ] Orchestrator stays lean - only coordinates, never implements
+
 ---
 
 ## IMPLEMENTATION PHASES

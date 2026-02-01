@@ -146,6 +146,26 @@ These are asked during each project's interview:
 
 ---
 
+## Context Management (CRITICAL)
+
+| Decision | Choice |
+|----------|--------|
+| Orchestrator context | MINIMIZE - delegate aggressively to agents |
+| Agent usage | Use agents to avoid filling orchestrator context |
+| On compaction | MUST re-read plans and definitions immediately |
+| Context preservation | Agents do the heavy lifting, orchestrator stays lean |
+
+### Compaction Recovery Protocol
+
+When the orchestrator experiences a compaction event:
+1. **IMMEDIATELY** re-read PROJECT_PLAN.md
+2. **IMMEDIATELY** re-read current module specs
+3. **IMMEDIATELY** re-read task status from records/
+4. **IMMEDIATELY** check beyondralph_knowledge/ for recent entries
+5. Resume from last known good state
+
+This prevents the orchestrator from "going off track" after losing context.
+
 ## Implementation Notes
 
 1. **Windows support is first-class** - not just WSL2, native Windows with full package manager support
@@ -154,3 +174,5 @@ These are asked during each project's interview:
 4. **Do whatever it takes** - install packages, research unknown tech, find alternatives
 5. **Notify only when stuck** - don't spam user with progress updates
 6. **Encrypt secrets** - credentials must be protected at rest
+7. **Orchestrator stays lean** - delegate to agents aggressively, minimize context usage
+8. **Re-read on compaction** - MUST reload plans/definitions after any compaction event

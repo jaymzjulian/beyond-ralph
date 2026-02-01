@@ -466,6 +466,63 @@ class TestSessionManager:
 3. Refactor while keeping tests green
 4. Commit
 
+## Context Management - CRITICAL
+
+**The orchestrator MUST minimize its context usage.**
+
+### Aggressive Agent Delegation
+
+The orchestrator should:
+- **Delegate to agents aggressively** - don't do work in the orchestrator
+- **Keep orchestrator context lean** - only coordination, not implementation
+- **Use agents for ALL research** - don't read files directly, spawn agents
+- **Use agents for ALL implementation** - orchestrator never writes code
+- **Use agents for ALL testing** - orchestrator validates evidence, doesn't run tests
+
+```
+WRONG (fills orchestrator context):
+[ORCHESTRATOR] Reading src/module.py...
+[ORCHESTRATOR] Analyzing 500 lines of code...
+[ORCHESTRATOR] Writing implementation...
+
+CORRECT (delegates to agents):
+[ORCHESTRATOR] Spawning implementation agent for module.py
+[AGENT:impl-xyz] <does all the work in its own context>
+[ORCHESTRATOR] Received result: "Module implemented, 3 files changed"
+```
+
+### Compaction Recovery Protocol (MANDATORY)
+
+When the orchestrator experiences a **compaction event**, it MUST:
+
+1. **IMMEDIATELY** re-read `PROJECT_PLAN.md`
+2. **IMMEDIATELY** re-read current module specs in `records/[module]/`
+3. **IMMEDIATELY** re-read task status from `records/*/tasks.md`
+4. **IMMEDIATELY** check `beyondralph_knowledge/` for recent entries
+5. **Resume from last known good state**
+
+```python
+async def on_compaction():
+    """Recovery protocol after context compaction."""
+    # Re-establish understanding
+    await read_file("PROJECT_PLAN.md")
+    await read_file("beyondralph_knowledge/interview-decisions.md")
+
+    # Find current state
+    current_module = await find_in_progress_module()
+    await read_file(f"records/{current_module}/tasks.md")
+
+    # Check recent knowledge
+    recent_knowledge = await list_recent_knowledge(hours=24)
+    for entry in recent_knowledge:
+        await read_file(entry)
+
+    # Resume
+    await continue_from_last_checkpoint()
+```
+
+This prevents the orchestrator from "going off track" after losing context.
+
 ## Agent Trust Model - CRITICAL
 
 **NO AGENT IS TRUSTED. EVERY AGENT MUST BE VALIDATED BY ANOTHER AGENT.**
