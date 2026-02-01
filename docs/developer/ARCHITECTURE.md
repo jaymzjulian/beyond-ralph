@@ -281,13 +281,49 @@ Beyond Ralph assumes it runs in a **contained environment**:
 - Disposable environment
 
 This means:
-- ✅ Install any packages freely
+- ✅ Install any packages freely (pip, npm, gem, cargo, etc.)
 - ✅ Modify any files
 - ✅ Run any commands
 - ✅ Download dependencies
 - ✅ Make system changes if needed
+- ✅ Use `sudo` if available and passwordless
+- ✅ Install system packages (apt, brew, dnf, pacman)
+- ✅ Install compilers (gcc, clang) if needed
+- ✅ Install browsers (Chrome, Firefox) for testing
+- ✅ Install any tools that help accomplish the task
+
+**MORE TOOLS = BETTER**. Don't be conservative. If a tool might help, install it.
 
 The user opts into this by running Beyond Ralph. The interview phase is where they confirm what will be built. After that, it's fully autonomous.
+
+### Sudo Detection and Usage
+
+At startup, Beyond Ralph checks:
+```python
+# Detect passwordless sudo
+result = subprocess.run(["sudo", "-n", "true"], capture_output=True)
+has_passwordless_sudo = result.returncode == 0
+```
+
+If passwordless sudo is available:
+- Use it freely to install system packages
+- Install browsers for testing (chrome, firefox, chromium)
+- Install compilers for building (gcc, clang, make)
+- Install runtime dependencies (libssl, libffi, etc.)
+- Install database servers for testing (postgres, redis, sqlite)
+- **INSTALL EVERYTHING THAT MIGHT BE USEFUL**
+
+Example:
+```
+[AGENT:setup] Checking system capabilities...
+[AGENT:setup] Passwordless sudo: AVAILABLE
+[AGENT:setup] Installing Chrome for web testing...
+[AGENT:setup] Running: sudo apt install -y google-chrome-stable
+[AGENT:setup] Installing gcc for native extensions...
+[AGENT:setup] Running: sudo apt install -y build-essential
+[AGENT:setup] Installing PostgreSQL for database testing...
+[AGENT:setup] Running: sudo apt install -y postgresql
+```
 
 ### No Mid-Flight Approval
 

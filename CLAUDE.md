@@ -180,6 +180,30 @@ After interview (Phase 2) completes:
 This is CRITICAL: We assume a contained/isolated environment (container, VM, etc.)
 where the system can freely install packages, modify files, and run commands.
 
+### System Package Installation
+
+**If passwordless `sudo` is available, USE IT LIBERALLY.**
+
+Beyond Ralph should detect and use sudo to install:
+- Browsers (Chrome, Firefox, Chromium) for web testing
+- Compilers (gcc, clang, make) for native extensions
+- Databases (PostgreSQL, Redis, SQLite) for testing
+- Runtime libraries (libssl, libffi, zlib)
+- Any other tools that might be useful
+
+**Philosophy: MORE TOOLS = BETTER.**
+
+Don't be conservative. If something might help, install it. We're in a contained
+environment - there's no risk to the host system.
+
+```
+# Example: Preparing for a web app test
+sudo apt install -y google-chrome-stable  # Browser
+sudo apt install -y postgresql            # Database
+sudo apt install -y redis-server          # Cache
+sudo apt install -y build-essential       # Compilers
+```
+
 ### Tool Selection Philosophy
 
 **Beyond Ralph chooses its preferred tools when the user hasn't specified one.**
