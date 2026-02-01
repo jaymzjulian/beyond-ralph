@@ -8,6 +8,116 @@ Beyond Ralph is a Claude Code plugin/skill/agent system that enables fully auton
 
 **CRITICAL PRINCIPLE**: This project must be entirely self-contained. It ships everything it needs and installs its own dependencies. It CANNOT rely on external tools like SuperClaude, ralph-loop, or any other tooling that isn't explicitly bundled or installed via the project's own mechanisms.
 
+## User Experience - CRITICAL
+
+**Beyond Ralph runs INSIDE Claude Code, not as an external tool.**
+
+The user experience is:
+1. User starts Claude Code normally
+2. User types `/beyond-ralph start --spec SPEC.md`
+3. Beyond Ralph orchestrator takes over, streaming ALL subagent activity into the Claude Code UI
+4. User watches agents work in real-time, just like native Claude agents
+5. User can intervene via AskUserQuestion prompts when agents need input
+6. Progress is visible, engaging, and observable
+
+### Streaming Subagent Output
+
+Subagent messages MUST stream into the main Claude Code session. The approach:
+
+```
+[BEYOND-RALPH] Phase 2: Interview Agent starting...
+[AGENT:interview-abc123] I need to ask you some questions about the requirements.
+[AGENT:interview-abc123] 1. What authentication method do you prefer?
+[USER INPUT REQUIRED]
+... user answers via AskUserQuestion ...
+[AGENT:interview-abc123] Great, using OAuth2. Now for testing...
+[BEYOND-RALPH] Interview complete, transitioning to Phase 3...
+[AGENT:planning-def456] Creating modular specification...
+```
+
+This provides:
+- **Transparency**: User sees exactly what agents are doing
+- **Engagement**: Watching agents work is part of the experience
+- **Control**: User can observe and intervene when needed
+- **Trust**: Nothing happens "behind the scenes"
+
+## Claude Code Integration Architecture
+
+Beyond Ralph is a **native Claude Code plugin**, not an external tool. Key integration points:
+
+### 1. Skills (`/beyond-ralph` commands)
+```
+/beyond-ralph start --spec SPEC.md    # Start new project
+/beyond-ralph resume                   # Resume paused project
+/beyond-ralph status                   # Show progress
+/beyond-ralph pause                    # Manual pause
+```
+
+### 2. Hooks (Autonomous control)
+- **Stop hooks**: Keep orchestrator running until project complete
+- **Pre-operation hooks**: Check quotas before agent spawning
+- **Progress hooks**: Stream subagent output to UI
+
+### 3. Agent Spawning Options
+
+Two potential approaches for subagent management:
+
+**Option A: Claude Code Task Tool (Preferred)**
+- Use the native `Task` tool to spawn subagents
+- Agents run as Claude Code subagents within the same session
+- Output automatically streams to UI
+- Built-in context management
+- Requires investigation of Task tool capabilities
+
+**Option B: CLI Session Spawning (Fallback)**
+- Spawn `claude` CLI processes via subprocess
+- Pipe stdout/stderr to main session output
+- Parse and prefix output with agent identifiers
+- More control but more complexity
+
+### 4. Output Streaming Implementation
+
+```python
+# Pseudocode for streaming subagent output
+async def stream_agent_output(agent_id: str, process: Process):
+    """Stream subagent output to main Claude Code session."""
+    async for line in process.stdout:
+        # Prefix with agent identifier
+        formatted = f"[AGENT:{agent_id}] {line}"
+        # Output to main session (mechanism TBD based on Claude Code APIs)
+        await output_to_session(formatted)
+```
+
+### 5. User Interaction Flow
+
+```
+User: /beyond-ralph start --spec myproject.md
+
+[BEYOND-RALPH] Starting autonomous development...
+[BEYOND-RALPH] Phase 1: Ingesting specification...
+[AGENT:spec-001] Reading myproject.md...
+[AGENT:spec-001] Identified 5 major features, 3 integration points
+[AGENT:spec-001] Questions for interview phase prepared
+
+[BEYOND-RALPH] Phase 2: Interview starting...
+[AGENT:interview-002] I have questions about your requirements:
+
+<AskUserQuestion appears in Claude Code UI>
+Q: What database system should we use?
+- PostgreSQL (Recommended)
+- MySQL
+- SQLite
+- Other
+
+User selects: PostgreSQL
+
+[AGENT:interview-002] Noted. Next question...
+... continues until interview complete ...
+
+[BEYOND-RALPH] Phase 3: Creating specification...
+... and so on ...
+```
+
 ## Technology Stack
 
 - **Language**: Python 3.11+

@@ -59,24 +59,41 @@ Create a fully autonomous multi-agent development system for Claude Code that im
 - [ ] Implement evidence verification
 - [ ] Implement checkbox management
 
-### Phase 4: Claude Code Integration
-**Goal**: Skills, hooks, and CLI
+### Phase 4: Claude Code Integration (CRITICAL - USER EXPERIENCE)
+**Goal**: Native Claude Code experience with streaming subagent output
+
+#### Milestone 4.0: Research Claude Code Internals
+- [ ] Investigate Task tool capabilities for subagent spawning
+- [ ] Research how native agents stream output to UI
+- [ ] Determine best approach (Task tool vs CLI subprocess)
+- [ ] Document findings in knowledge base
 
 #### Milestone 4.1: Skills
-- [ ] Create beyond-ralph skill
-- [ ] Create phase-specific sub-skills
-- [ ] Implement skill registration
+- [ ] Create beyond-ralph skill with `/beyond-ralph` commands
+- [ ] Implement `start --spec` for new projects
+- [ ] Implement `resume` for continuing work
+- [ ] Implement `status` for progress display
+- [ ] Implement `pause` for manual pause
+- [ ] Skill registration in pyproject.toml entry points
 
-#### Milestone 4.2: Hooks
-- [ ] Implement stop hooks
-- [ ] Implement quota hooks
-- [ ] Implement progress hooks
+#### Milestone 4.2: Subagent Output Streaming
+- [ ] Implement output capture from subagents
+- [ ] Format output with agent identifiers `[AGENT:xyz]`
+- [ ] Stream to main Claude Code session UI
+- [ ] Handle multi-line output properly
+- [ ] Show phase transitions clearly `[BEYOND-RALPH]`
 
-#### Milestone 4.3: CLI
-- [ ] Implement `start` command
-- [ ] Implement `resume` command
-- [ ] Implement `status` command
-- [ ] Implement `quota` command
+#### Milestone 4.3: User Interaction Integration
+- [ ] Route AskUserQuestion from subagents to main session
+- [ ] Capture user responses and return to subagent
+- [ ] Handle interrupts and manual pauses
+- [ ] Progress indicators and status updates
+
+#### Milestone 4.4: Hooks
+- [ ] Implement stop hooks for ralph-loop persistence
+- [ ] Implement pre-operation quota hooks
+- [ ] Implement progress hooks for streaming
+- [ ] Hook registration in pyproject.toml entry points
 
 ### Phase 5: Testing & Documentation
 **Goal**: Complete test coverage and docs
