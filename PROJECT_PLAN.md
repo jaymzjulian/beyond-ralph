@@ -95,19 +95,41 @@ Create a fully autonomous multi-agent development system for Claude Code that im
 - [ ] Implement progress hooks for streaming
 - [ ] Hook registration in pyproject.toml entry points
 
-### Phase 5: Testing & Documentation
-**Goal**: Complete test coverage and docs
+### Phase 5: Testing Skills & Capabilities
+**Goal**: Bundled testing tools AND autonomous discovery
 
-#### Milestone 5.1: Testing
+#### Milestone 5.1: Bundled Testing Skills
+- [ ] API/Backend testing (httpx, pytest, responses)
+- [ ] Web UI testing (playwright)
+- [ ] CLI testing (pexpect, subprocess)
+- [ ] Desktop GUI testing (pillow, pyautogui)
+- [ ] Screenshot/video analysis (opencv-python, pillow)
+- [ ] Mock API server for development testing
+
+#### Milestone 5.2: Research Agent for Tool Discovery
+- [ ] Web search integration (find testing frameworks)
+- [ ] GitHub API integration (check stars, maintenance)
+- [ ] Documentation fetching and parsing
+- [ ] Platform compatibility checking
+- [ ] Alternative comparison logic
+- [ ] Recommendation presentation to user
+- [ ] Autonomous installation (with user approval)
+- [ ] Knowledge base storage of discoveries
+
+#### Milestone 5.3: Self-Testing
 - [ ] Unit tests (80%+ coverage)
-- [ ] Integration tests
-- [ ] End-to-end tests
+- [ ] Integration tests for each agent type
+- [ ] End-to-end test with sample project
 
-#### Milestone 5.2: Documentation
+### Phase 6: Documentation
+**Goal**: Complete docs for users and developers
+
+#### Milestone 6.1: Documentation
 - [ ] User documentation
 - [ ] Developer documentation
 - [ ] API reference
-- [ ] Examples
+- [ ] Example projects
+- [ ] Testing guide (how to test different app types)
 
 ### Phase 6: Self-Containment Verification
 **Goal**: Ensure project ships everything it needs

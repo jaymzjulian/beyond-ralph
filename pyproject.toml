@@ -20,14 +20,43 @@ classifiers = [
 ]
 
 dependencies = [
+    # Core
     "pydantic>=2.0",
     "pyyaml>=6.0",
     "rich>=13.0",
     "typer>=0.9",
-    "httpx>=0.25",
     "aiofiles>=23.0",
     "tenacity>=8.0",
     "psutil>=5.9",
+
+    # API/Backend Testing
+    "httpx>=0.25",
+    "responses>=0.24",
+
+    # Web UI Testing
+    "playwright>=1.40",
+
+    # CLI Testing
+    "pexpect>=4.9",
+
+    # Desktop/Graphics Testing
+    "pillow>=10.0",
+    "opencv-python>=4.8",
+
+    # Research capabilities
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+]
+
+[project.optional-dependencies]
+desktop = [
+    # GUI automation (optional, may require system deps)
+    "pyautogui>=0.9",
+]
+
+mobile = [
+    # Mobile testing (discovered/installed as needed)
+    "Appium-Python-Client>=3.0",
 ]
 
 [project.optional-dependencies]

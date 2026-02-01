@@ -118,6 +118,104 @@ User selects: PostgreSQL
 ... and so on ...
 ```
 
+## Autonomous Testing Capabilities
+
+Beyond Ralph ships with testing skills for various application types AND the ability to autonomously discover and install new testing tools.
+
+### Bundled Testing Skills
+
+| App Type | Testing Approach | Bundled Tools |
+|----------|------------------|---------------|
+| **API/Backend** | Mock → Real endpoints | httpx, pytest, responses |
+| **Web UI** | Browser automation | playwright (cross-platform) |
+| **CLI** | Process interaction | pexpect, subprocess |
+| **Desktop GUI** | Screenshot analysis | pillow, pyautogui |
+| **Mobile** | Emulator screenshots | appium (discovered) |
+| **Games/Graphics** | Frame capture | opencv-python, pillow |
+
+### Autonomous Tool Discovery
+
+When Beyond Ralph encounters an app type it can't test with bundled tools:
+
+```python
+# Research Agent flow
+1. Identify what kind of testing is needed
+2. Search for appropriate testing frameworks
+3. Evaluate options (platform support, maturity, docs)
+4. Present recommendation to user via AskUserQuestion
+5. If approved: install and configure automatically
+6. Document in knowledge base for future projects
+```
+
+### Example: Discovering a New Testing Tool
+
+```
+[BEYOND-RALPH] Need to test: Electron desktop app on Linux
+[AGENT:research-abc] Searching for Electron testing frameworks...
+[AGENT:research-abc] Evaluating options:
+  - Spectron: REJECTED (deprecated)
+  - Playwright: SELECTED (cross-platform, actively maintained, 50k+ stars)
+  - Puppeteer: Alternative (needs electron-connect wrapper)
+
+[AGENT:research-abc] Installing playwright...
+[AGENT:research-abc] Running: uv add playwright
+[AGENT:research-abc] Running: playwright install
+[AGENT:research-abc] Configuration added to project.
+[KNOWLEDGE] Stored: electron-testing-playwright.md
+```
+
+**Note**: NO user approval requested - the spec was approved during interview phase.
+
+### Autonomous Operation Model
+
+**The interview phase is the ONLY approval gate.**
+
+After interview (Phase 2) completes:
+- All decisions were made during the interview
+- Spec was approved by the user
+- Beyond Ralph operates FULLY AUTONOMOUSLY
+- No further approval requests
+- Contained environment = safe to install anything
+
+This is CRITICAL: We assume a contained/isolated environment (container, VM, etc.)
+where the system can freely install packages, modify files, and run commands.
+
+### Tool Selection Philosophy
+
+**Beyond Ralph chooses its preferred tools when the user hasn't specified one.**
+
+If the user says "test my web app" without specifying a framework:
+- Beyond Ralph picks Playwright (its preferred choice)
+- No questions asked, just installs and uses it
+
+If a tool doesn't work:
+- **MANDATORY**: Search for and install an alternative
+- Do NOT ask the user what to try next
+- Do NOT give up without trying alternatives
+- Document what failed and why in knowledge base
+
+```
+[AGENT:testing] Playwright failing: Chrome not available on this platform
+[AGENT:testing] Searching for alternative browser automation tools...
+[AGENT:testing] Found: Selenium with Firefox works on this platform
+[AGENT:testing] Installing selenium and geckodriver...
+[AGENT:testing] Retrying tests with Selenium...
+[KNOWLEDGE] Stored: playwright-chrome-failure-arm64-linux.md
+```
+
+### Research Skill Requirements
+
+The research skill MUST:
+- Search the web for testing frameworks
+- Evaluate platform compatibility
+- Check if tool is actively maintained
+- Read official documentation
+- Compare alternatives
+- **Install immediately without user approval** (post-interview)
+- **Automatically find alternatives when tools fail** (MANDATORY)
+- **Pick preferred tools when user hasn't specified**
+- Document decisions in knowledge base
+
 ## Technology Stack
 
 - **Language**: Python 3.11+

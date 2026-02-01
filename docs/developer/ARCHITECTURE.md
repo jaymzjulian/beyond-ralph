@@ -251,12 +251,107 @@ Or for fatal errors:
 [BEYOND-RALPH] Project paused. Resume with /beyond-ralph resume
 ```
 
+## Autonomous Operation Model
+
+### Interview Phase = Only Approval Gate
+
+```
+Phase 1-2: INTERVIEW (User Interaction)
+  └── User approves spec and plan
+  └── All decisions are made here
+  └── User confirms testing approach
+  └── User approves dependencies
+
+Phase 3-8: AUTONOMOUS (No User Approval)
+  └── Beyond Ralph operates independently
+  └── Installs packages without asking
+  └── Makes implementation decisions
+  └── Only interrupts for:
+      - Clarifying questions (returns to interview)
+      - Fatal errors
+      - Quota limits
+```
+
+### Contained Environment Assumption
+
+Beyond Ralph assumes it runs in a **contained environment**:
+- Docker container
+- Virtual machine
+- Dedicated development machine
+- Disposable environment
+
+This means:
+- ✅ Install any packages freely
+- ✅ Modify any files
+- ✅ Run any commands
+- ✅ Download dependencies
+- ✅ Make system changes if needed
+
+The user opts into this by running Beyond Ralph. The interview phase is where they confirm what will be built. After that, it's fully autonomous.
+
+### No Mid-Flight Approval
+
+```
+WRONG (interrupts flow):
+[AGENT:impl] Need to install pytest-asyncio
+[USER INPUT REQUIRED] Install pytest-asyncio? (y/n)
+
+CORRECT (autonomous):
+[AGENT:impl] Installing pytest-asyncio...
+[AGENT:impl] Running: uv add pytest-asyncio
+[AGENT:impl] Installation complete, continuing...
+```
+
+### Preferred Tools & Automatic Fallback
+
+Beyond Ralph has **opinions about its tools**. When the user hasn't specified:
+
+| Need | Preferred Tool | Why |
+|------|----------------|-----|
+| Web testing | Playwright | Modern, cross-browser, well-maintained |
+| API testing | httpx + pytest | Async, clean API |
+| CLI testing | pexpect | Interactive CLI support |
+| Screenshot analysis | Pillow + OpenCV | Powerful, widely supported |
+| Package management | uv | Fast, reliable |
+
+**MANDATORY FALLBACK BEHAVIOR**:
+
+When a tool fails, Beyond Ralph MUST:
+1. Detect the failure
+2. Understand why it failed (parse error, check platform, etc.)
+3. Search for alternatives
+4. Install and try the alternative
+5. Only give up after exhausting reasonable alternatives
+
+```
+[AGENT:testing] ERROR: playwright install failed (ARM64 + Wayland not supported)
+[AGENT:testing] Analyzing failure...
+[AGENT:testing] Searching for ARM64-compatible browser automation...
+[AGENT:testing] Found: Selenium + Firefox works on ARM64 Linux
+[AGENT:testing] Installing selenium...
+[AGENT:testing] Installing geckodriver...
+[AGENT:testing] Retrying tests...
+[AGENT:testing] Tests passing with Selenium fallback
+[KNOWLEDGE] arm64-wayland-browser-testing.md: Use Selenium, not Playwright
+```
+
+**Never ask the user what alternative to try. Just find one and use it.**
+
+### safemode Override
+
+If `safemode=true` in config:
+- Prompts before dangerous operations
+- For users who DON'T have contained environments
+- Default is `safemode=false`
+
 ## Security Considerations
 
-1. **safemode config**: When enabled, prompts for dangerous operations
-2. **Agent isolation**: Agents can't access each other's sessions directly
-3. **Knowledge base validation**: Prevent injection via knowledge entries
-4. **Quota enforcement**: Prevent runaway resource usage
+1. **Contained environment assumed**: User runs in isolated environment
+2. **Interview is approval**: Spec approval = blanket approval for implementation
+3. **safemode config**: Optional prompts for non-contained environments
+4. **Agent isolation**: Agents can't access each other's sessions directly
+5. **Knowledge base validation**: Prevent injection via knowledge entries
+6. **Quota enforcement**: Prevent runaway resource usage
 
 ## Implementation Priorities
 
