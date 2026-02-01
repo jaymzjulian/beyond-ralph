@@ -1,1 +1,1 @@
-"""Beyond Ralph test suite."""
+"""Beyond Ralph Test Suite."""

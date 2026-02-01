@@ -1,1 +1,1 @@
-"""Unit tests for Beyond Ralph components."""
+"""Unit tests for Beyond Ralph."""
