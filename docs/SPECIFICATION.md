@@ -621,18 +621,74 @@ class ResearchAgent:
 
 **Location**: `src/beyond_ralph/agents/review_agent.py`
 **Dependencies**: Module 9 (for linter discovery)
-**Provides**: Mandatory code review with linting and security
+**Provides**: Mandatory code review with linting, security, and semantic analysis
+
+### Supported Languages
+
+| Language | Linters | Security | Dependencies |
+|----------|---------|----------|--------------|
+| Python | ruff, mypy, bandit | bandit, detect-secrets | safety |
+| JavaScript | eslint | detect-secrets | npm audit |
+| TypeScript | eslint, tsc | detect-secrets | npm audit |
+| Rust | clippy | cargo audit | cargo audit |
+| Go | staticcheck, go vet | detect-secrets | - |
+| Kotlin | detekt, ktlint | detect-secrets | - |
+| C | cppcheck | detect-secrets | - |
+| C++ | cppcheck, clang-tidy | detect-secrets | - |
+| Ruby | rubocop, brakeman | brakeman | bundle audit |
+| Java | checkstyle | detect-secrets | - |
+| Swift | swiftlint | detect-secrets | - |
 
 ### Review Categories
 
-| Category | Tools | Severity |
-|----------|-------|----------|
-| Linting | ruff, eslint, golint, clippy | ALL blocking |
-| Types | mypy, tsc | ALL blocking |
-| Security | semgrep, bandit, detect-secrets | ALL blocking |
-| Dependencies | safety, npm audit | ALL blocking |
-| Complexity | radon | HIGH blocking |
-| Dead code | vulture | MEDIUM blocking |
+| Category | Severity | Description |
+|----------|----------|-------------|
+| **INCOMPLETE** | CRITICAL/HIGH | TODOs, unimplemented!(), NotImplementedError, placeholders |
+| Security | CRITICAL | OWASP, vulnerabilities, secrets |
+| Dependencies | CRITICAL | Known vulnerable packages |
+| Linting | MEDIUM-HIGH | Language-specific issues |
+| Types | MEDIUM-HIGH | Type checking errors |
+| Complexity | MEDIUM-HIGH | High cyclomatic complexity |
+| Semantic | VARIES | LLM-detected issues (code doesn't do what it claims) |
+
+### CRITICAL: Incomplete Code Detection
+
+**Beyond Ralph NEVER accepts incomplete code.** The following patterns are flagged:
+
+```python
+# Python - CRITICAL
+raise NotImplementedError()  # CRITICAL
+...                          # CRITICAL (ellipsis placeholder)
+# TODO: implement later      # HIGH
+
+# Rust - CRITICAL
+todo!()                      # CRITICAL
+unimplemented!()             # CRITICAL
+panic!("not implemented")    # CRITICAL
+
+# Kotlin - CRITICAL
+TODO()                       # CRITICAL
+notImplementedError()        # CRITICAL
+
+# JavaScript/TypeScript - CRITICAL
+throw new Error("Not implemented")  # CRITICAL
+// TODO: add later                  # HIGH
+
+# C/C++ - CRITICAL
+assert(false)                # CRITICAL
+#error not implemented       # CRITICAL
+
+# Ruby - CRITICAL
+raise NotImplementedError    # CRITICAL
+fail 'Not implemented'       # CRITICAL
+
+# Generic - HIGH
+PLACEHOLDER                  # HIGH
+STUB                         # HIGH
+FIXME                        # CRITICAL
+XXX                          # HIGH
+HACK                         # MEDIUM
+```
 
 ### Review Flow
 
@@ -640,11 +696,12 @@ class ResearchAgent:
 1. Coding Agent implements
 2. Testing Agent validates
 3. Code Review Agent reviews
-   - Run all linters
+   - FIRST: Check for incomplete code (TODOs, unimplemented, etc.)
+   - Run language-specific linters
    - Run security scans
    - Check complexity
-   - Check dead code
-4. ALL findings must be fixed (zero tolerance)
+   - Check dependencies
+4. ALL findings with severity MEDIUM+ must be fixed (zero tolerance)
 5. Coding Agent fixes ALL items
 6. Loop until Review Agent approves
 ```
@@ -653,17 +710,23 @@ class ResearchAgent:
 
 ```python
 class CodeReviewAgent:
-    async def review(self, project_root: Path) -> ReviewResult:
+    async def review(self) -> ReviewResult:
         """Perform full code review."""
 
     async def detect_languages(self) -> list[str]:
-        """Detect languages in project."""
+        """Detect all languages in project."""
+
+    async def check_incomplete_code(self) -> list[ReviewItem]:
+        """CRITICAL: Check for TODOs, unimplemented, placeholders."""
 
     async def run_linters(self, language: str) -> list[ReviewItem]:
         """Run language-specific linters."""
 
     async def run_security_scan(self) -> list[ReviewItem]:
         """Run security scanners."""
+
+    async def check_dependencies(self) -> list[ReviewItem]:
+        """Check for vulnerable dependencies in all languages."""
 ```
 
 ---
