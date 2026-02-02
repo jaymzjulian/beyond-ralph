@@ -6,9 +6,9 @@
 
 ### Task: Implement Session Spawning
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned
+- [x] Implemented
+- [x] Mock tested
 - [ ] Integration tested
 - [ ] Live tested
 
@@ -30,9 +30,9 @@
 
 ### Task: Implement Session Locking
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned
+- [x] Implemented
+- [x] Mock tested
 - [ ] Integration tested
 - [ ] Live tested
 

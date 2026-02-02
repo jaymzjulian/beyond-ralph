@@ -1,26 +1,26 @@
 # Module 7: Knowledge Base - Tasks
 
-## Module Status: Not Started
+## Module Status: Core Implemented
 
 ---
 
 ### Task: Implement Knowledge Entry Model
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned
+- [x] Implemented
+- [x] Mock tested
 - [ ] Integration tested
 - [ ] Live tested
 
-**Description**: Pydantic model for knowledge entries with YAML frontmatter.
+**Description**: Dataclass model for knowledge entries with YAML frontmatter.
 
 ---
 
 ### Task: Implement Knowledge Write
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned
+- [x] Implemented
+- [x] Mock tested
 - [ ] Integration tested
 - [ ] Live tested
 
@@ -30,9 +30,9 @@
 
 ### Task: Implement Knowledge Search
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned
+- [x] Implemented
+- [x] Mock tested
 - [ ] Integration tested
 - [ ] Live tested
 
@@ -42,9 +42,9 @@
 
 ### Task: Implement Recency Filter
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned
+- [x] Implemented
+- [x] Mock tested
 - [ ] Integration tested
 - [ ] Live tested
 
@@ -54,9 +54,9 @@
 
 ### Task: Implement Session Filter
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned
+- [x] Implemented
+- [x] Mock tested
 - [ ] Integration tested
 - [ ] Live tested
 
