@@ -13,6 +13,12 @@ from beyond_ralph.core.knowledge import (
     KnowledgeEntry,
     create_knowledge_entry,
 )
+from beyond_ralph.core.notifications import (
+    NotificationChannel,
+    NotificationLevel,
+    NotificationManager,
+    get_notification_manager,
+)
 from beyond_ralph.core.orchestrator import (
     Orchestrator,
     OrchestratorState,
@@ -47,6 +53,11 @@ __all__ = [
     "PhaseResult",
     "ProjectStatus",
     "get_orchestrator",
+    # Notifications
+    "NotificationChannel",
+    "NotificationLevel",
+    "NotificationManager",
+    "get_notification_manager",
     # Knowledge Base
     "KnowledgeBase",
     "KnowledgeEntry",
