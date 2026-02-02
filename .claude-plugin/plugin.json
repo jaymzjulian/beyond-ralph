@@ -1,0 +1,26 @@
+{
+  "name": "beyond-ralph",
+  "description": "True Autonomous Coding - Multi-agent orchestration implementing the Spec and Interview Coder methodology",
+  "version": "0.1.0",
+  "author": {
+    "name": "jaymzjulian",
+    "url": "https://github.com/jaymzjulian"
+  },
+  "repository": "https://github.com/jaymzjulian/beyond-ralph",
+  "homepage": "https://github.com/jaymzjulian/beyond-ralph",
+  "engines": {
+    "claude-code": ">=1.0.0"
+  },
+  "keywords": [
+    "autonomous",
+    "multi-agent",
+    "orchestration",
+    "tdd",
+    "testing"
+  ],
+  "categories": [
+    "Development",
+    "Productivity",
+    "Testing"
+  ]
+}
