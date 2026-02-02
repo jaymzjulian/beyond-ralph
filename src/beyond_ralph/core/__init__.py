@@ -13,6 +13,14 @@ from beyond_ralph.core.knowledge import (
     KnowledgeEntry,
     create_knowledge_entry,
 )
+from beyond_ralph.core.orchestrator import (
+    Orchestrator,
+    OrchestratorState,
+    Phase,
+    PhaseResult,
+    ProjectStatus,
+    get_orchestrator,
+)
 from beyond_ralph.core.quota_manager import (
     QuotaManager,
     QuotaStatus,
@@ -32,6 +40,13 @@ from beyond_ralph.core.session_manager import (
 )
 
 __all__ = [
+    # Orchestrator
+    "Orchestrator",
+    "OrchestratorState",
+    "Phase",
+    "PhaseResult",
+    "ProjectStatus",
+    "get_orchestrator",
     # Knowledge Base
     "KnowledgeBase",
     "KnowledgeEntry",
