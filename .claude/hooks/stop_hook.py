@@ -170,8 +170,9 @@ def main():
     br_state = state.get("state", "unknown")
 
     # Track iterations for safety (prevent truly infinite loops)
+    # Default to 10000 - Beyond Ralph can run for days with many iterations
     iteration = state.get("hook_iteration", 0) + 1
-    max_iterations = state.get("max_iterations", 100)  # Safety limit
+    max_iterations = state.get("max_iterations", 10000)  # Very high for autonomous operation
 
     if iteration > max_iterations:
         print(f"🛑 Beyond Ralph: Max iterations ({max_iterations}) reached. Stopping.", file=sys.stderr)
