@@ -16,9 +16,6 @@ operates autonomously in the contained environment.
 
 from __future__ import annotations
 
-import asyncio
-import json
-import re
 import subprocess
 from dataclasses import dataclass, field
 from enum import Enum

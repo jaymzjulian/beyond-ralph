@@ -1,0 +1,57 @@
+name: beyond-ralph-resume
+description: Resume a paused Beyond Ralph autonomous development project
+trigger: /beyond-ralph-resume
+
+instructions: |
+  Resume a paused Beyond Ralph autonomous development project.
+
+  ## RESUME PROCEDURE
+
+  1. **Check State**
+     - Read .beyond_ralph/state.json
+     - Verify project exists and was previously started
+     - Determine which phase was active when paused
+
+  2. **Check Quota**
+     - Run /usage to check current quota
+     - If still at >= 85%, inform user and remain paused
+     - If quota has reset, proceed to resume
+
+  3. **Restore Context**
+     - Read beyondralph_knowledge/ for accumulated knowledge
+     - Read records/ for task status
+     - Identify incomplete tasks (missing checkboxes)
+
+  4. **Resume Work**
+     - If paused mid-phase, continue that phase
+     - If between phases, start the next phase
+     - Spawn fresh child agents as needed
+
+  5. **Continue Loop**
+     - Keep working through phases
+     - Spawn agents for work, validate with separate agents
+     - Check quota before each agent spawn
+     - Update records as work completes
+
+  ## RECOVERY SCENARIOS
+
+  ### Paused Due to Quota
+  - Check if quota has reset
+  - If yes, resume from last phase
+  - If no, report current quota and estimated reset time
+
+  ### Paused Due to User Request
+  - Resume immediately from last state
+  - Pick up where orchestrator left off
+
+  ### Crashed/Interrupted
+  - Analyze state and knowledge to determine progress
+  - Identify incomplete work
+  - Resume from safe checkpoint
+
+  ## IMPORTANT
+
+  - Do NOT restart from beginning - resume from where we stopped
+  - Preserve all accumulated knowledge and progress
+  - Continue applying trust model (separate agents for validation)
+  - Keep checking quota (pause again if needed)

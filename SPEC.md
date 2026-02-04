@@ -70,14 +70,17 @@ This is going to be a LONG iterative develpoment process for a large portion of 
 
 Record Keeping
 ---------------
-Keep STRONG records and task lists - manage development like a formal project as much as possible!!!  Task lists should have 3 checkboxes:
+Keep STRONG records and task lists - manage development like a formal project as much as possible!!!  Task lists should have 6 checkboxes:
  * Planned - we know how we're going to implement it
  * Implemented - we believe we have an implementation
  * Mock tested - tested in a unit-testy way
  * Integration tested - tested in a CI way
  * Livetested - tested in the real application
+ * Spec Compliant - verified by a SEPARATE agent that the implementation matches what the spec says
 
-ALL of these must be checked to pass 100%, and anything less than 100% is unacceptable.  Note that a failing testing agent CAN and SHOULD updat these to REMOVE the implementated checkbox, particularly, if it is NOT in fact correctly iplement
+The Spec Compliant checkbox is CRITICAL - a dedicated agent (NOT the implementation agent, NOT the testing agent) must verify that what was built actually matches what was specified. This catches cases where tests pass but the implementation doesn't match requirements.
+
+ALL of these must be checked to pass 100%, and anything less than 100% is unacceptable.  Note that a failing testing agent CAN and SHOULD update these to REMOVE the implemented checkbox, particularly, if it is NOT in fact correctly implemented. Similarly, a spec compliance agent CAN and SHOULD remove the Implemented checkbox if the implementation doesn't match the spec.
 
 Each module should ahve its own individual specs as well, which it needs to me, in order to split that up - again, modularize as much as possible, adn this includes the record keeping.  Have a sepearte records/[modulename] folder for each module of the system that keeps these
 

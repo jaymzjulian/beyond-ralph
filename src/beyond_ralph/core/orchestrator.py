@@ -4,8 +4,8 @@ The main control loop that implements the Spec and Interview Coder methodology.
 Manages phases, agent coordination, and project completion.
 """
 
-import asyncio
 import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any
 
 from beyond_ralph.core.knowledge import KnowledgeBase, create_knowledge_entry
-from beyond_ralph.core.quota_manager import QuotaManager, get_quota_manager
+from beyond_ralph.core.quota_manager import get_quota_manager
 from beyond_ralph.core.records import Checkbox, RecordsManager
-from beyond_ralph.core.session_manager import SessionManager, SessionStatus, get_session_manager
+from beyond_ralph.core.session_manager import SessionOutput, SessionStatus, get_session_manager
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +89,7 @@ class PhaseResult:
     loop_to_phase: Phase | None = None
     errors: list[str] = field(default_factory=list)
     knowledge_entries: list[str] = field(default_factory=list)
+    data: dict[str, Any] = field(default_factory=dict)  # Additional data from agents
 
 
 class Orchestrator:
@@ -107,6 +108,7 @@ class Orchestrator:
         project_root: Path | None = None,
         safemode: bool = False,
         max_parallel_agents: int = 7,
+        use_cli: bool = True,
     ):
         """Initialize orchestrator.
 
@@ -114,16 +116,19 @@ class Orchestrator:
             project_root: Root directory for the project.
             safemode: If True, require permissions for dangerous operations.
             max_parallel_agents: Maximum concurrent agents (Claude Code limit is 7).
+            use_cli: If True, spawn real Claude CLI sessions (for standalone use).
+                     If False, use Task tool mode (for running inside Claude Code).
         """
         self.project_root = project_root or Path.cwd()
         self.safemode = safemode
         self.max_parallel_agents = max_parallel_agents
+        self.use_cli = use_cli  # Whether to spawn real CLI sessions
 
-        # Core components
+        # Core components - use project-specific paths
         self.session_manager = get_session_manager(safemode=safemode)
         self.quota_manager = get_quota_manager()
-        self.knowledge_base = KnowledgeBase()
-        self.records_manager = RecordsManager()
+        self.knowledge_base = KnowledgeBase(self.project_root / "beyondralph_knowledge")
+        self.records_manager = RecordsManager(self.project_root / "records")
 
         # State
         self.project_id: str | None = None
@@ -132,6 +137,7 @@ class Orchestrator:
         self.spec_path: Path | None = None
         self._last_activity = datetime.now()
         self._errors: list[str] = []
+        self._enable_streaming: bool = True  # Stream subagent output to console
 
         # Phase transition map
         self._phase_order = [
@@ -145,6 +151,35 @@ class Orchestrator:
             Phase.TESTING,
             Phase.COMPLETE,
         ]
+
+    def _stream_output(self, output: SessionOutput) -> None:
+        """Callback for streaming subagent output to console.
+
+        Formats output with [AGENT:id] or [BEYOND-RALPH] prefixes.
+
+        Args:
+            output: Session output to stream.
+        """
+        if not self._enable_streaming:
+            return
+
+        # Print formatted output to console
+        formatted = output.formatted()
+        print(formatted)
+
+        # Also log at debug level
+        logger.debug("Agent output: %s", formatted)
+
+    def _log_phase_transition(self, from_phase: Phase, to_phase: Phase) -> None:
+        """Log phase transitions with [BEYOND-RALPH] prefix.
+
+        Args:
+            from_phase: Previous phase.
+            to_phase: New phase.
+        """
+        if self._enable_streaming:
+            print(f"[BEYOND-RALPH] Phase transition: {from_phase.value} → {to_phase.value}")
+        logger.info("Phase transition: %s → %s", from_phase.value, to_phase.value)
 
     async def start(self, spec_path: Path) -> None:
         """Start autonomous development from specification.
@@ -248,12 +283,22 @@ class Orchestrator:
 
     def _generate_project_id(self) -> str:
         """Generate a unique project ID."""
-        import uuid
         return f"br-{uuid.uuid4().hex[:8]}"
 
     async def _run_loop(self) -> None:
         """Main orchestration loop."""
+        max_iterations = 100  # Prevent infinite loops
+        iteration = 0
+        loop_back_count = 0
+        max_loop_backs = 3  # Maximum times to loop back before forcing completion
+
         while self.state == OrchestratorState.RUNNING:
+            iteration += 1
+            if iteration > max_iterations:
+                logger.error("Maximum iterations reached - stopping")
+                self._errors.append("Maximum iterations reached")
+                break
+
             # Check quota before any work
             if not await self.quota_manager.pre_spawn_check():
                 logger.warning("Quota limit reached - pausing")
@@ -274,14 +319,22 @@ class Orchestrator:
 
             # Handle phase transition
             if result.should_loop and result.loop_to_phase:
-                logger.info("Looping back to phase: %s", result.loop_to_phase)
-                self.phase = result.loop_to_phase
+                loop_back_count += 1
+                if loop_back_count >= max_loop_backs:
+                    logger.warning("Maximum loop backs reached - forcing completion")
+                    self.phase = Phase.COMPLETE
+                else:
+                    logger.info("Looping back to phase: %s (attempt %d/%d)",
+                               result.loop_to_phase, loop_back_count, max_loop_backs)
+                    self.phase = result.loop_to_phase
             elif result.next_phase:
                 logger.info("Transitioning to phase: %s", result.next_phase)
                 self.phase = result.next_phase
+                loop_back_count = 0  # Reset on forward progress
             else:
                 # Move to next phase in order
                 self.phase = self._get_next_phase()
+                loop_back_count = 0
 
             self._last_activity = datetime.now()
 
@@ -402,55 +455,102 @@ class Orchestrator:
                 message="Specification file not found",
             )
 
-        # Spawn spec agent to analyze the spec
-        session = await self.session_manager.spawn(
-            prompt=f"Analyze the specification at {self.spec_path} and identify key features, requirements, and questions for the interview phase.",
-            agent_type="spec",
+        # Read and parse the spec
+        spec_content = self.spec_path.read_text()
+
+        # Extract project name from the spec (first heading)
+        project_name = "main"
+        for line in spec_content.split("\n"):
+            if line.startswith("# "):
+                project_name = line[2:].strip().lower().replace(" ", "_")
+                break
+
+        # Create a task from the spec requirements
+        task_name = f"Implement {project_name.replace('_', ' ').title()}"
+        task_description = spec_content[:500] + "..." if len(spec_content) > 500 else spec_content
+
+        task = self.records_manager.add_task(
+            module=project_name,
+            name=task_name,
+            description=task_description,
         )
 
-        # For now, mark as complete (actual agent execution TBD)
-        await self.session_manager.complete(
-            session.uuid,
-            "Specification ingested successfully",
+        # Spawn spec agent to analyze the spec
+        self._log_phase_transition(Phase.IDLE, Phase.SPEC_INGESTION)
+        session = await self.session_manager.spawn(
+            use_cli=self.use_cli,
+            prompt=f"""Analyze the specification at {self.spec_path} and identify:
+1. Key features and requirements (list each one)
+2. Technologies mentioned or implied
+3. Questions that need clarification in the interview phase
+4. Potential ambiguities or missing information
+
+Read the spec file and provide a structured analysis.""",
+            agent_type="spec",
+            output_callback=self._stream_output,
         )
+
+        # Use the actual session result (spawn_cli waits for completion)
+        if session.status == SessionStatus.FAILED:
+            return PhaseResult(
+                success=False,
+                phase=Phase.SPEC_INGESTION,
+                message=f"Spec analysis failed: {session.result or 'Unknown error'}",
+                errors=[session.result or "Spec agent failed"],
+            )
 
         await self._log_to_knowledge(
             title="Spec Ingestion Complete",
-            content=f"Ingested specification from {self.spec_path}",
+            content=f"Ingested specification from {self.spec_path}\n\nAgent result:\n{session.result}",
             category="phase-1",
         )
 
         return PhaseResult(
             success=True,
             phase=Phase.SPEC_INGESTION,
-            message="Specification ingested",
+            message=f"Specification ingested, created task: {task.name}",
             next_phase=Phase.INTERVIEW,
+            data={"session_result": session.result},
         )
 
     async def _phase_interview(self) -> PhaseResult:
         """Phase 2: Interview the user."""
         logger.info("Phase 2: User interview")
 
-        # Spawn interview agent
-        session = await self.session_manager.spawn(
-            prompt="Conduct a thorough interview with the user about the project requirements. Use AskUserQuestion to gather information about implementation preferences, testing requirements, and any missing details.",
-            agent_type="interview",
-        )
-
         # Interview requires user input - this phase may take time
         self.state = OrchestratorState.WAITING_FOR_USER
 
-        # For now, mark as complete
-        await self.session_manager.complete(
-            session.uuid,
-            "Interview completed",
+        # Spawn interview agent
+        session = await self.session_manager.spawn(
+            use_cli=self.use_cli,
+            prompt="""Conduct a thorough interview with the user about the project requirements.
+
+Use AskUserQuestion to gather information about:
+1. Implementation preferences (language, frameworks, tools)
+2. Testing requirements (what types of tests, coverage expectations)
+3. Missing details from the specification
+4. Technical constraints or requirements
+5. Deployment environment
+
+After gathering all necessary information, summarize the key decisions made.
+This is the ONLY approval gate - after this phase, the system operates autonomously.""",
+            agent_type="interview",
+            output_callback=self._stream_output,
         )
 
         self.state = OrchestratorState.RUNNING
 
+        if session.status == SessionStatus.FAILED:
+            return PhaseResult(
+                success=False,
+                phase=Phase.INTERVIEW,
+                message=f"Interview failed: {session.result or 'Unknown error'}",
+                errors=[session.result or "Interview agent failed"],
+            )
+
         await self._log_to_knowledge(
             title="Interview Complete",
-            content="User interview phase completed. Decisions recorded in knowledge base.",
+            content=f"User interview phase completed.\n\nDecisions:\n{session.result}",
             category="phase-2",
         )
 
@@ -459,6 +559,7 @@ class Orchestrator:
             phase=Phase.INTERVIEW,
             message="Interview completed",
             next_phase=Phase.SPEC_CREATION,
+            data={"decisions": session.result},
         )
 
     async def _phase_spec_creation(self) -> PhaseResult:
@@ -466,17 +567,37 @@ class Orchestrator:
         logger.info("Phase 3: Creating modular specification")
 
         session = await self.session_manager.spawn(
-            prompt="Create a complete modular specification based on the ingested spec and interview decisions. Split into independent modules with clear interfaces.",
+            use_cli=self.use_cli,
+            prompt=f"""Create a complete modular specification based on:
+1. The original specification at {self.spec_path}
+2. The interview decisions recorded in the knowledge base
+
+Split into independent modules with:
+- Clear interfaces between modules
+- Explicit dependencies
+- Test requirements for each module
+- 6-checkbox task tracking (Planned, Implemented, Mock tested, Integration tested, Live tested, Spec compliant)
+
+Write the modular specification to records/[module_name]/spec.md for each module.
+Also create a MODULAR_SPEC.md in the project root summarizing all modules.""",
             agent_type="planning",
+            output_callback=self._stream_output,
         )
 
-        await self.session_manager.complete(session.uuid, "Specification created")
+        if session.status == SessionStatus.FAILED:
+            return PhaseResult(
+                success=False,
+                phase=Phase.SPEC_CREATION,
+                message=f"Spec creation failed: {session.result or 'Unknown error'}",
+                errors=[session.result or "Spec creation agent failed"],
+            )
 
         return PhaseResult(
             success=True,
             phase=Phase.SPEC_CREATION,
             message="Modular specification created",
             next_phase=Phase.PLANNING,
+            data={"spec_result": session.result},
         )
 
     async def _phase_planning(self) -> PhaseResult:
@@ -484,17 +605,37 @@ class Orchestrator:
         logger.info("Phase 4: Creating project plan")
 
         session = await self.session_manager.spawn(
-            prompt="Create a detailed project plan with milestones, testing plans, and implementation order based on module dependencies.",
+            use_cli=self.use_cli,
+            prompt="""Create a detailed project plan with:
+1. Implementation order based on module dependencies
+2. Milestones for each phase
+3. Testing plans (unit, integration, live)
+4. Risk mitigation strategies
+
+For each module, create records/[module]/tasks.md with:
+- Task checkboxes (6 checkboxes per task)
+- Clear acceptance criteria
+- Dependencies on other modules
+
+Update the PROJECT_PLAN.md with the overall timeline and milestones.""",
             agent_type="planning",
+            output_callback=self._stream_output,
         )
 
-        await self.session_manager.complete(session.uuid, "Project plan created")
+        if session.status == SessionStatus.FAILED:
+            return PhaseResult(
+                success=False,
+                phase=Phase.PLANNING,
+                message=f"Planning failed: {session.result or 'Unknown error'}",
+                errors=[session.result or "Planning agent failed"],
+            )
 
         return PhaseResult(
             success=True,
             phase=Phase.PLANNING,
             message="Project plan created",
             next_phase=Phase.REVIEW,
+            data={"plan_result": session.result},
         )
 
     async def _phase_review(self) -> PhaseResult:
@@ -502,15 +643,39 @@ class Orchestrator:
         logger.info("Phase 5: Reviewing for uncertainties")
 
         session = await self.session_manager.spawn(
-            prompt="Review the specification and project plan for any uncertainties, ambiguities, or missing information. Identify items that need clarification.",
+            use_cli=self.use_cli,
+            prompt="""Review the specification and project plan for any uncertainties, ambiguities, or missing information.
+
+Check:
+1. All requirements have corresponding tasks
+2. No conflicting requirements
+3. Dependencies are correctly identified
+4. Testing plans are complete
+5. No TBD, TODO, or unclear items remain
+
+If you find uncertainties that REQUIRE user input, clearly state them.
+If you find issues that can be resolved without user input, resolve them.
+
+Output format:
+- NEEDS_INTERVIEW: true/false
+- UNCERTAINTIES: (list if any)
+- RESOLVED: (list of auto-resolved issues)""",
             agent_type="review",
+            output_callback=self._stream_output,
         )
 
-        await self.session_manager.complete(session.uuid, "Review completed")
+        if session.status == SessionStatus.FAILED:
+            return PhaseResult(
+                success=False,
+                phase=Phase.REVIEW,
+                message=f"Review failed: {session.result or 'Unknown error'}",
+                errors=[session.result or "Review agent failed"],
+            )
 
-        # Check if we need to loop back to interview
-        # This would be determined by the review agent's findings
-        has_uncertainties = False  # Placeholder - would come from agent result
+        # Check if we need to loop back to interview based on agent output
+        result_text = session.result or ""
+        has_uncertainties = "NEEDS_INTERVIEW: true" in result_text.lower() or \
+                           "needs_interview: true" in result_text.lower()
 
         if has_uncertainties:
             return PhaseResult(
@@ -519,6 +684,7 @@ class Orchestrator:
                 message="Uncertainties found - returning to interview",
                 should_loop=True,
                 loop_to_phase=Phase.INTERVIEW,
+                data={"review_result": session.result},
             )
 
         return PhaseResult(
@@ -526,6 +692,7 @@ class Orchestrator:
             phase=Phase.REVIEW,
             message="Review complete - no uncertainties",
             next_phase=Phase.VALIDATION,
+            data={"review_result": session.result},
         )
 
     async def _phase_validation(self) -> PhaseResult:
@@ -533,17 +700,55 @@ class Orchestrator:
         logger.info("Phase 6: Validating project plan")
 
         session = await self.session_manager.spawn(
-            prompt="Validate the project plan. Check that all requirements are covered, dependencies are correct, and the plan is implementable.",
+            use_cli=self.use_cli,
+            prompt="""Validate the project plan as a SEPARATE agent (you did not create it).
+
+Check:
+1. All requirements from the original spec have corresponding tasks
+2. Dependencies between modules are correct and complete
+3. Testing plans cover all acceptance criteria
+4. Implementation order respects dependencies
+5. No circular dependencies exist
+6. Each task has all 6 checkboxes defined
+
+Output:
+- VALID: true/false
+- ISSUES: (list of any problems found)
+- SUGGESTIONS: (improvements that could be made)
+
+If VALID is false, the plan needs to be revised.""",
             agent_type="validation",
+            output_callback=self._stream_output,
         )
 
-        await self.session_manager.complete(session.uuid, "Validation completed")
+        if session.status == SessionStatus.FAILED:
+            return PhaseResult(
+                success=False,
+                phase=Phase.VALIDATION,
+                message=f"Validation failed: {session.result or 'Unknown error'}",
+                errors=[session.result or "Validation agent failed"],
+            )
+
+        # Check if validation passed
+        result_text = session.result or ""
+        is_valid = "VALID: true" in result_text.lower() or "valid: true" in result_text.lower()
+
+        if not is_valid and "VALID: false" in result_text.lower():
+            return PhaseResult(
+                success=True,
+                phase=Phase.VALIDATION,
+                message="Validation found issues - returning to planning",
+                should_loop=True,
+                loop_to_phase=Phase.PLANNING,
+                data={"validation_result": session.result},
+            )
 
         return PhaseResult(
             success=True,
             phase=Phase.VALIDATION,
             message="Project plan validated",
             next_phase=Phase.IMPLEMENTATION,
+            data={"validation_result": session.result},
         )
 
     async def _phase_implementation(self) -> PhaseResult:
@@ -565,37 +770,148 @@ class Orchestrator:
         task = incomplete[0]
         logger.info("Implementing task: %s", task.name)
 
-        # Three-agent trust model:
-        # 1. Coding Agent implements
+        # THREE-AGENT TRUST MODEL:
+        # Each agent operates independently and validates the others
+
+        # 1. CODING AGENT - Implements with TDD
+        if self._enable_streaming:
+            print(f"[BEYOND-RALPH] Spawning Coding Agent for: {task.name}")
         coding_session = await self.session_manager.spawn(
-            prompt=f"Implement: {task.name}\nDescription: {task.description}\nUse TDD - write tests first, then implement.",
+            use_cli=self.use_cli,
+            prompt=f"""CODING AGENT: Implement the following task using TDD.
+
+Task: {task.name}
+Description: {task.description}
+
+REQUIREMENTS:
+1. Write tests FIRST (Test-Driven Development)
+2. Implement the minimal code to pass tests
+3. Refactor while keeping tests green
+4. Follow the project's code style (check CLAUDE.md)
+5. Add type hints and docstrings to public functions
+6. Commit your changes with descriptive messages
+
+After implementation, update records/{task.module}/tasks.md:
+- Mark [x] Planned
+- Mark [x] Implemented
+
+Output what files you created/modified.""",
             agent_type="implementation",
+            output_callback=self._stream_output,
         )
 
-        # 2. Testing Agent validates
+        if coding_session.status == SessionStatus.FAILED:
+            return PhaseResult(
+                success=False,
+                phase=Phase.IMPLEMENTATION,
+                message=f"Coding failed for {task.name}: {coding_session.result}",
+                errors=[coding_session.result or "Coding agent failed"],
+            )
+
+        # 2. TESTING AGENT - Validates independently (did NOT write the code)
+        if self._enable_streaming:
+            print(f"[BEYOND-RALPH] Spawning Testing Agent for: {task.name}")
         testing_session = await self.session_manager.spawn(
-            prompt=f"Validate the implementation of: {task.name}\nRun tests and provide evidence of functionality.",
+            use_cli=self.use_cli,
+            prompt=f"""TESTING AGENT: Validate the implementation of: {task.name}
+
+You are a SEPARATE agent - you did NOT write this code.
+Your job is to verify it works correctly.
+
+REQUIREMENTS:
+1. Run the unit tests: pytest tests/
+2. Check test coverage is adequate
+3. Run integration tests if applicable
+4. Verify the implementation matches the task description
+5. Provide EVIDENCE of test results (paste output)
+
+If tests FAIL:
+- Output TESTS_PASSED: false
+- List specific failures
+
+If tests PASS:
+- Output TESTS_PASSED: true
+- Update records/{task.module}/tasks.md:
+  - Mark [x] Mock tested
+  - Mark [x] Integration tested (if applicable)""",
             agent_type="testing",
+            output_callback=self._stream_output,
         )
 
-        # 3. Code Review Agent reviews
+        if testing_session.status == SessionStatus.FAILED:
+            return PhaseResult(
+                success=False,
+                phase=Phase.IMPLEMENTATION,
+                message=f"Testing failed for {task.name}: {testing_session.result}",
+                errors=[testing_session.result or "Testing agent failed"],
+            )
+
+        # Check if tests passed
+        tests_passed = "TESTS_PASSED: true" in (testing_session.result or "").lower()
+
+        # 3. CODE REVIEW AGENT - Reviews for quality (did NOT write or test)
+        if self._enable_streaming:
+            print(f"[BEYOND-RALPH] Spawning Review Agent for: {task.name}")
         review_session = await self.session_manager.spawn(
-            prompt=f"Review the implementation of: {task.name}\nCheck linting, security, and best practices. ALL findings must be fixed.",
+            use_cli=self.use_cli,
+            prompt=f"""CODE REVIEW AGENT: Review the implementation of: {task.name}
+
+You are a SEPARATE agent - you did NOT write or test this code.
+Your job is to ensure code quality.
+
+RUN THESE CHECKS:
+1. Linting: ruff check src/
+2. Type checking: mypy src/
+3. Security: Check for OWASP top 10 vulnerabilities
+4. Best practices: Check for code smells, complexity
+
+Output format:
+REVIEW_PASSED: true/false
+MUST_FIX: (list of items that MUST be fixed)
+SUGGESTIONS: (optional improvements)
+
+The Coding Agent MUST fix all MUST_FIX items before proceeding.
+If REVIEW_PASSED is false, this task cannot be marked complete.""",
             agent_type="review",
+            output_callback=self._stream_output,
         )
 
-        # Wait for all to complete
-        await self.session_manager.complete(coding_session.uuid, "Implementation done")
-        await self.session_manager.complete(testing_session.uuid, "Testing done")
-        await self.session_manager.complete(review_session.uuid, "Review done")
+        if review_session.status == SessionStatus.FAILED:
+            return PhaseResult(
+                success=False,
+                phase=Phase.IMPLEMENTATION,
+                message=f"Review failed for {task.name}: {review_session.result}",
+                errors=[review_session.result or "Review agent failed"],
+            )
 
-        # Update checkboxes
-        self.records_manager.update_checkbox(
-            task.module, task.name, Checkbox.IMPLEMENTED, True
-        )
-        self.records_manager.update_checkbox(
-            task.module, task.name, Checkbox.MOCK_TESTED, True
-        )
+        # Check if review passed
+        review_result = review_session.result or ""
+        review_passed = "REVIEW_PASSED: true" in review_result.lower()
+        has_must_fix = "MUST_FIX:" in review_result and review_result.split("MUST_FIX:")[1].strip()
+
+        # If review found issues, coding agent must fix them
+        if has_must_fix and not review_passed:
+            if self._enable_streaming:
+                print(f"[BEYOND-RALPH] Review found issues - Coding Agent must fix")
+            # Spawn coding agent again to fix issues
+            fix_session = await self.session_manager.spawn(
+                use_cli=self.use_cli,
+                prompt=f"""CODING AGENT: Fix the following review issues for {task.name}
+
+Review findings:
+{review_result}
+
+You MUST fix ALL items listed under MUST_FIX.
+Do not skip any items. Do not argue with the reviewer.
+Fix each issue and run tests to verify the fix doesn't break anything.""",
+                agent_type="implementation",
+                output_callback=self._stream_output,
+            )
+
+        # Update checkboxes based on actual results
+        if tests_passed:
+            self.records_manager.update_checkbox(task.module, task.name, Checkbox.MOCK_TESTED, True)
+            self.records_manager.update_checkbox(task.module, task.name, Checkbox.INTEGRATION_TESTED, True)
 
         # Check if more tasks remain
         remaining = self.records_manager.get_incomplete_tasks()
@@ -604,6 +920,11 @@ class Orchestrator:
                 success=True,
                 phase=Phase.IMPLEMENTATION,
                 message=f"Completed: {task.name}. {len(remaining)} tasks remaining.",
+                data={
+                    "coding_result": coding_session.result,
+                    "testing_result": testing_session.result,
+                    "review_result": review_session.result,
+                },
             )
 
         return PhaseResult(
@@ -617,29 +938,122 @@ class Orchestrator:
         """Phase 8: Final testing and validation."""
         logger.info("Phase 8: Final testing")
 
+        if self._enable_streaming:
+            print("[BEYOND-RALPH] Phase 8: Running final integration and live tests")
+
+        # Run full integration tests
         session = await self.session_manager.spawn(
-            prompt="Run all integration and live tests. Verify the complete system works as specified. Mark remaining checkboxes.",
+            use_cli=self.use_cli,
+            prompt="""FINAL TESTING: Run all integration and live tests.
+
+REQUIREMENTS:
+1. Run full test suite: pytest tests/ -v
+2. Check coverage meets threshold: pytest --cov
+3. Run any live tests against real endpoints
+4. Verify the complete system works as specified in the original spec
+5. Check all modules integrate correctly
+
+For each task in records/*/tasks.md:
+- Verify tests pass: mark [x] Mock tested, [x] Integration tested
+- If live testing passed: mark [x] Live tested
+- If all previous checks pass: mark [x] Spec compliant
+
+Output:
+ALL_TESTS_PASSED: true/false
+COVERAGE: percentage
+FAILED_TESTS: (list if any)
+INCOMPLETE_TASKS: (list of tasks missing checkboxes)""",
             agent_type="testing",
+            output_callback=self._stream_output,
         )
 
-        await self.session_manager.complete(session.uuid, "Final testing complete")
+        if session.status == SessionStatus.FAILED:
+            return PhaseResult(
+                success=False,
+                phase=Phase.TESTING,
+                message=f"Final testing failed: {session.result or 'Unknown error'}",
+                errors=[session.result or "Testing agent failed"],
+            )
 
-        # Check if all tasks are 5/5
+        # Check results
+        result_text = session.result or ""
+        all_passed = "ALL_TESTS_PASSED: true" in result_text.lower()
+
+        # Check if all tasks are complete (6/6 checkboxes)
         if self.records_manager.is_complete():
             return PhaseResult(
                 success=True,
                 phase=Phase.TESTING,
                 message="All tests passed - project complete",
                 next_phase=Phase.COMPLETE,
+                data={"testing_result": session.result},
             )
 
-        # If not complete, loop back to validation
+        # If not complete, check if tests failed or just missing checkboxes
+        if not all_passed:
+            return PhaseResult(
+                success=True,
+                phase=Phase.TESTING,
+                message="Some tests failed - returning to implementation",
+                should_loop=True,
+                loop_to_phase=Phase.IMPLEMENTATION,
+                data={"testing_result": session.result},
+            )
+
+        # Tests passed but checkboxes incomplete - try spec compliance check
+        if self._enable_streaming:
+            print("[BEYOND-RALPH] Running Spec Compliance check")
+
+        compliance_session = await self.session_manager.spawn(
+            use_cli=self.use_cli,
+            prompt=f"""SPEC COMPLIANCE AGENT: Verify implementation matches specification.
+
+You are a SEPARATE agent from both implementers and testers.
+Your job is to verify the implementation matches what was specified.
+
+Read the original specification at: {self.spec_path}
+Compare it against the implementation.
+
+For EACH requirement in the spec, verify:
+1. The requirement is implemented
+2. The implementation behaves as specified
+3. Edge cases are handled
+
+Output:
+SPEC_COMPLIANT: true/false
+MISSING_REQUIREMENTS: (list if any)
+DEVIATIONS: (list of spec deviations)
+
+If SPEC_COMPLIANT is true, mark [x] Spec compliant on all tasks.""",
+            agent_type="validation",
+            output_callback=self._stream_output,
+        )
+
+        spec_compliant = "SPEC_COMPLIANT: true" in (compliance_session.result or "").lower()
+
+        if spec_compliant:
+            return PhaseResult(
+                success=True,
+                phase=Phase.TESTING,
+                message="All tests and spec compliance passed - project complete",
+                next_phase=Phase.COMPLETE,
+                data={
+                    "testing_result": session.result,
+                    "compliance_result": compliance_session.result,
+                },
+            )
+
+        # Spec compliance failed
         return PhaseResult(
             success=True,
             phase=Phase.TESTING,
-            message="Some tests failed - returning to validation",
+            message="Spec compliance check failed - returning to implementation",
             should_loop=True,
-            loop_to_phase=Phase.VALIDATION,
+            loop_to_phase=Phase.IMPLEMENTATION,
+            data={
+                "testing_result": session.result,
+                "compliance_result": compliance_session.result,
+            },
         )
 
 

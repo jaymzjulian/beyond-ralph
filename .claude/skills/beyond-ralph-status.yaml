@@ -1,0 +1,46 @@
+name: beyond-ralph-status
+description: Check status of Beyond Ralph autonomous development project
+trigger: /beyond-ralph-status
+
+instructions: |
+  Check and report the status of the current Beyond Ralph autonomous development project.
+
+  ## STATUS CHECK PROCEDURE
+
+  1. Read state from .beyond_ralph/state.json if it exists
+  2. Read task records from records/ directories
+  3. Check quota status with /usage
+
+  ## REPORT FORMAT
+
+  Report the following information:
+
+  ### Project State
+  - Current phase (1-8 or PAUSED/COMPLETE)
+  - Project started timestamp
+  - Last activity timestamp
+
+  ### Task Completion
+  For each module, count tasks with checkboxes:
+  - Total tasks
+  - Fully complete (all 5 checkboxes)
+  - Partially complete
+  - Not started
+
+  Calculate overall completion percentage:
+  (tasks with all 5 checkboxes / total tasks) * 100
+
+  ### Active Agents
+  - List any child sessions that may be running
+  - Check for stale sessions (no activity > 30 min)
+
+  ### Quota Status
+  - Session usage %
+  - Weekly usage %
+  - Whether paused due to quota
+
+  ### Knowledge Base
+  - Count of knowledge entries
+  - Recent entries (last 5)
+
+  Present this as a clear, formatted status report.

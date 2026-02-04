@@ -8,10 +8,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import yaml
-
 
 # Default knowledge base location
 DEFAULT_KB_PATH = Path("beyondralph_knowledge")

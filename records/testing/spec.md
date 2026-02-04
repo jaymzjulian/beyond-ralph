@@ -1,148 +1,388 @@
-# Module 3: Testing Skills - Specification
+# Module 6: Testing - Specification
 
-**Module**: testing
-**Location**: `src/beyond_ralph/testing/`
-**Dependencies**: research (for tool discovery), system-capabilities (for display setup)
+> Testing Capabilities: Bundled testing tools for various application types.
 
-## Purpose
+---
 
-Provide bundled testing capabilities for all application types, plus automatic discovery and installation of additional testing tools.
+## Overview
 
-## Requirements
+The Testing module provides bundled testing capabilities for different application types (API, Web, CLI, Desktop GUI, Games). It includes skills for running tests, mock servers for development, and screenshot analysis.
 
-### R1: API/Backend Testing
-- Mock API testing first (develop against mocks)
-- Real endpoint testing when mocks pass
-- Request/response validation
-- Error scenario testing
-- Support for OpenAPI/Swagger spec ingestion
+**Key Principle**: Test autonomously, provide evidence, support various app types.
 
-**Bundled Tools**: httpx, pytest, responses, respx
+---
 
-### R2: Web UI Testing
-- Browser automation with cross-browser support
-- Screenshot capture for evidence
-- Element interaction and form testing
-- Navigation and routing testing
-- Responsive layout testing
-- Prefer Playwright (our preferred tool)
+## Location
 
-**Bundled Tools**: playwright
+`src/beyond_ralph/testing/`
 
-### R3: CLI Testing
-- Process spawning and control
-- Input/output verification
-- Exit code checking
-- Interactive CLI support (expect-style)
-- Timeout handling for hung processes
+---
 
-**Bundled Tools**: pexpect, subprocess
+## Components
 
-### R4: Desktop GUI Testing
-- Screenshot capture and analysis
-- Image comparison (before/after)
-- GUI automation where possible
-- VNC/RDP integration for headless environments
-- Window detection and interaction
+### 6.1 Testing Skills (`skills.py`)
 
-**Bundled Tools**: pillow, pyautogui
+**Purpose**: High-level testing capabilities for different app types.
 
-### R5: Graphics/Game Testing
-- Frame capture from video output
-- Image analysis and comparison
-- Motion detection
-- Color/pattern recognition
-- FPS measurement if available
-
-**Bundled Tools**: opencv-python, pillow
-
-### R6: Mock API Server
-- Generate mock server from OpenAPI spec
-- Record and replay capability
-- Programmable responses
-- Latency/error simulation
-- Automatic transition: mock passes → test against real
-
-### R7: Mobile Testing
-- Android emulator support
-- Screenshot capture from emulator
-- App installation and interaction
-- Discovered via Research Agent when needed
-
-### R8: Test Workflow
-```
-1. All tests start against MOCKS
-2. Mock tests must achieve 100% coverage
-3. Automatic transition to real APIs when mocks pass
-4. Real API tests run non-destructively
-5. Gaps documented in UNTESTABLE.md with justification
-```
-
-## Interface
-
+**Interface**:
 ```python
-class TestingSkill:
-    """Base class for testing skills."""
+from dataclasses import dataclass, field
+from typing import Optional
 
-    async def setup(self) -> None:
-        """Set up testing environment."""
+@dataclass
+class TestEvidence:
+    """Evidence from test execution."""
+    test_type: str
+    passed: bool
+    output: str
+    coverage: Optional[float] = None
+    screenshots: list[str] = field(default_factory=list)
+    logs: list[str] = field(default_factory=list)
+    duration_seconds: float = 0.0
 
-    async def teardown(self) -> None:
-        """Clean up testing environment."""
+class TestingSkills:
+    """Bundled testing capabilities for various app types."""
 
-    async def run_tests(self, target: Path) -> TestResult:
-        """Run tests and return results with evidence."""
+    async def test_api(
+        self,
+        base_url: str,
+        endpoints: list[dict],
+        use_mock: bool = True
+    ) -> TestEvidence:
+        """Test API endpoints.
 
-    async def generate_evidence(self) -> Evidence:
-        """Generate evidence of test run."""
+        Args:
+            base_url: Base URL of API (or mock server).
+            endpoints: List of endpoint specs:
+                [
+                    {"method": "GET", "path": "/users", "expected_status": 200},
+                    {"method": "POST", "path": "/users", "body": {...}, "expected_status": 201}
+                ]
+            use_mock: If True, start mock server first.
+
+        Uses: httpx, pytest, responses
+
+        Flow:
+            1. If use_mock, start MockAPIServer
+            2. Run endpoint tests
+            3. Collect evidence
+            4. Return TestEvidence
+        """
+
+    async def test_web(
+        self,
+        url: str,
+        scenarios: list[dict]
+    ) -> TestEvidence:
+        """Test web UI.
+
+        Args:
+            url: URL to test.
+            scenarios: List of test scenarios:
+                [
+                    {"name": "Login", "steps": [
+                        {"action": "fill", "selector": "#email", "value": "test@example.com"},
+                        {"action": "click", "selector": "#submit"},
+                        {"action": "assert", "selector": ".welcome", "text": "Welcome"}
+                    ]}
+                ]
+
+        Uses: playwright
+
+        Captures screenshots at each step.
+        """
+
+    async def test_cli(
+        self,
+        command: str,
+        scenarios: list[dict],
+        interactive: bool = False
+    ) -> TestEvidence:
+        """Test CLI application.
+
+        Args:
+            command: Command to test.
+            scenarios: List of test scenarios:
+                [
+                    {"args": ["--help"], "expected_output": "Usage:"},
+                    {"args": ["create", "foo"], "expected_exit_code": 0}
+                ]
+            interactive: If True, use pexpect for interactive testing.
+
+        Uses: pexpect, subprocess
+        """
+
+    async def test_desktop_gui(
+        self,
+        app_command: str,
+        scenarios: list[dict]
+    ) -> TestEvidence:
+        """Test desktop GUI application.
+
+        Args:
+            app_command: Command to launch app.
+            scenarios: List of test scenarios:
+                [
+                    {"name": "Startup", "screenshot": True},
+                    {"action": "click", "coords": [100, 200], "screenshot": True}
+                ]
+
+        Uses: pillow, pyautogui
+
+        Requires display (Xvfb or real).
+        """
+
+    async def analyze_screenshot(
+        self,
+        image_path: str,
+        expected: str
+    ) -> bool:
+        """Analyze screenshot for expected content.
+
+        Uses image analysis to verify UI state.
+        Returns True if expected content found.
+        """
+
+    async def test_game(
+        self,
+        game_command: str,
+        scenarios: list[dict]
+    ) -> TestEvidence:
+        """Test game/graphics application.
+
+        Args:
+            game_command: Command to launch game.
+            scenarios: Frame capture and analysis scenarios.
+
+        Uses: pillow, opencv-python (if available)
+        """
+```
+
+---
+
+### 6.2 Mock API Server (`mock_server.py`)
+
+**Purpose**: Provide mock APIs for development testing.
+
+**Interface**:
+```python
+from typing import Optional
 
 class MockAPIServer:
-    """Local mock API server."""
+    """Mock API server for development testing."""
 
-    async def from_openapi(self, spec_path: Path) -> None:
-        """Load endpoints from OpenAPI spec."""
+    def __init__(self, port: int = 8000) -> None:
+        """Initialize mock server."""
 
-    async def start(self, port: int = 8080) -> None:
-        """Start mock server."""
+    @classmethod
+    def from_openapi(cls, spec_path: str, port: int = 8000) -> "MockAPIServer":
+        """Create mock server from OpenAPI/Swagger spec.
+
+        Automatically generates mock endpoints from spec.
+        """
+
+    def add_endpoint(
+        self,
+        method: str,
+        path: str,
+        response: dict,
+        status_code: int = 200
+    ) -> None:
+        """Add mock endpoint.
+
+        Args:
+            method: HTTP method (GET, POST, etc.).
+            path: URL path (supports path params like /users/{id}).
+            response: JSON response body.
+            status_code: HTTP status code.
+        """
+
+    def add_error_endpoint(
+        self,
+        method: str,
+        path: str,
+        error_code: int,
+        error_message: str
+    ) -> None:
+        """Add mock error endpoint."""
+
+    def add_delay(self, path: str, delay_ms: int) -> None:
+        """Add delay to endpoint for timeout testing."""
+
+    async def start(self) -> None:
+        """Start mock server in background."""
 
     async def stop(self) -> None:
         """Stop mock server."""
 
-    def record(self) -> None:
-        """Start recording requests."""
+    def get_url(self) -> str:
+        """Get base URL of mock server."""
 
-    def replay(self) -> None:
-        """Replay recorded requests."""
+    def get_request_log(self) -> list[dict]:
+        """Get log of all requests made to mock server."""
+```
+
+---
+
+### 6.3 Test Runner (`runner.py`)
+
+**Purpose**: Unified test runner for all test types.
+
+**Interface**:
+```python
+from typing import Callable
+
+class TestRunner:
+    """Unified test runner for all test types."""
+
+    async def run_pytest(
+        self,
+        path: str,
+        coverage: bool = True,
+        markers: Optional[list[str]] = None
+    ) -> TestEvidence:
+        """Run pytest with coverage.
+
+        Args:
+            path: Path to tests (file or directory).
+            coverage: If True, collect coverage data.
+            markers: Optional pytest markers to filter tests.
+
+        Returns:
+            TestEvidence with output and coverage.
+        """
+
+    async def run_playwright(
+        self,
+        test_file: str
+    ) -> TestEvidence:
+        """Run playwright tests.
+
+        Args:
+            test_file: Path to playwright test file.
+
+        Automatically captures screenshots and videos.
+        """
+
+    async def run_custom(
+        self,
+        command: str,
+        parse_output: Callable[[str], TestEvidence]
+    ) -> TestEvidence:
+        """Run custom test command.
+
+        Args:
+            command: Command to run.
+            parse_output: Function to parse output into TestEvidence.
+        """
+
+    async def run_all(
+        self,
+        test_paths: list[str]
+    ) -> list[TestEvidence]:
+        """Run all tests and collect evidence."""
+```
+
+---
+
+### 6.4 API Doc Ingester (`api_docs.py`)
+
+**Purpose**: Ingest and store API documentation.
+
+**Interface**:
+```python
+@dataclass
+class APIEndpoint:
+    method: str
+    path: str
+    description: str
+    parameters: list[dict]
+    request_body: Optional[dict]
+    responses: dict[int, dict]
 
 @dataclass
-class TestResult:
-    passed: bool
-    tests_run: int
-    tests_passed: int
-    tests_failed: int
-    coverage_percent: float
-    evidence: Evidence
-    failures: list[TestFailure]
+class APIDocumentation:
+    title: str
+    version: str
+    base_url: str
+    endpoints: list[APIEndpoint]
+
+class APIDocIngester:
+    """Ingest API documentation for testing."""
+
+    def ingest_openapi(self, spec_path: str) -> APIDocumentation:
+        """Ingest OpenAPI/Swagger specification."""
+
+    def ingest_postman(self, collection_path: str) -> APIDocumentation:
+        """Ingest Postman collection."""
+
+    def ingest_markdown(self, doc_path: str) -> APIDocumentation:
+        """Ingest markdown API documentation."""
+
+    def store_to_knowledge(
+        self,
+        docs: APIDocumentation,
+        session_id: str
+    ) -> None:
+        """Store API docs in knowledge base for agents."""
 ```
 
-## Display Server Integration
+---
 
-For headless testing:
+## Bundled Dependencies
+
+| App Type | Tools | PyPI Packages |
+|----------|-------|---------------|
+| API | HTTP client, mocking | httpx, pytest, responses |
+| Web | Browser automation | playwright |
+| CLI | Process interaction | pexpect, subprocess (stdlib) |
+| Desktop GUI | Screen capture | pillow, pyautogui |
+| Games | Frame capture | pillow, opencv-python |
+
+---
+
+## Dependencies
+
+| Depends On | For |
+|------------|-----|
+| Module 8 (System) | Tool availability checks |
+| Module 12 (Utils) | Logging, file operations |
+
+---
+
+## Error Handling
+
 ```python
-async def setup_display() -> VirtualDisplay:
-    """Set up virtual display for GUI testing.
+class TestingError(BeyondRalphError):
+    """Testing-related errors."""
 
-    Priority order:
-    1. Wayland (native, best performance)
-    2. xvnc (VNC accessible, good for debugging)
-    3. Xvfb (fallback, reliable)
-    """
+class TestRunError(TestingError):
+    """Test execution failed."""
+
+class MockServerError(TestingError):
+    """Mock server error."""
+
+class ScreenshotError(TestingError):
+    """Screenshot capture failed."""
 ```
+
+---
 
 ## Testing Requirements
 
-- Test each skill with mock applications
-- Test mock server with sample OpenAPI specs
-- Test display server setup on available platforms
-- Test evidence generation format
-- 100% coverage required for testing infrastructure itself
+| Test Type | Coverage |
+|-----------|----------|
+| Unit tests | Test parsing, evidence collection |
+| Integration tests | Full test execution |
+| Live tests | Real browser/CLI tests |
+
+---
+
+## Checkboxes
+
+- [x] Planned
+- [x] Implemented
+- [x] Mock tested
+- [ ] Integration tested
+- [ ] Live tested
+- [ ] Spec Compliant

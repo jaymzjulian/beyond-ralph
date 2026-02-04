@@ -3,15 +3,24 @@
 All phase-specific and trust model agents inherit from this base class.
 Provides common functionality for knowledge access, tool usage, and
 inter-agent communication.
+
+CRITICAL: All agents enforce CORE PRINCIPLES:
+- NEVER fake results - unknown = blocked, failure = failure
+- NEVER silent fallbacks - all fallbacks must be explicit and logged
+- NEVER hide errors - report honestly, fail loudly
+- NEVER skip verification - if it can be verified, verify it
+- NEVER generate dishonest code - apps built must follow same rules
+
+These principles propagate to all child agents and generated code.
 """
 
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
-import uuid
 
 
 class AgentModel(Enum):
@@ -44,7 +53,7 @@ class AgentResult:
     errors: list[str] = field(default_factory=list)
     question: str | None = None  # Set if agent needs to ask something
     artifacts: list[Path] = field(default_factory=list)
-    completed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def has_question(self) -> bool:
@@ -61,7 +70,7 @@ class AgentTask:
     instructions: str
     context: dict[str, Any] = field(default_factory=dict)
     parent_task_id: str | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @classmethod
     def create(
@@ -347,6 +356,121 @@ class BaseAgent(ABC):
             "session_id": self.session_id,
             "project_root": str(self.project_root),
         }
+
+    def get_full_agent_prompt(self) -> str:
+        """Get complete agent prompt with principles and runtime behaviors.
+
+        This includes:
+        - Core principles (never fake results)
+        - Runtime behaviors (git, todos, project plans)
+        - Resource checking requirements
+
+        Returns:
+            Complete prompt string for agent
+        """
+        from beyond_ralph.core.principles import get_complete_agent_prompt
+
+        return get_complete_agent_prompt()
+
+    def get_records_path(self, module_name: str) -> Path:
+        """Get path to records directory for a module.
+
+        Args:
+            module_name: Name of the module
+
+        Returns:
+            Path to module's records directory
+        """
+        records_dir = self.project_root / "records" / module_name
+        records_dir.mkdir(parents=True, exist_ok=True)
+        return records_dir
+
+    async def update_todo(
+        self,
+        module_name: str,
+        task_name: str,
+        checkbox: str,
+        checked: bool,
+    ) -> bool:
+        """Update a TODO checkbox in module records.
+
+        Agents MUST keep TODOs updated as they work.
+
+        Args:
+            module_name: Name of the module
+            task_name: Name of the task
+            checkbox: Which checkbox (planned, implemented, mock_tested, etc.)
+            checked: Whether to check or uncheck
+
+        Returns:
+            True if update succeeded
+        """
+        tasks_file = self.get_records_path(module_name) / "tasks.md"
+
+        if not tasks_file.exists():
+            # Create initial tasks file
+            content = f"# {module_name} Tasks\n\n## Tasks\n\n"
+            tasks_file.write_text(content)
+
+        content = tasks_file.read_text()
+
+        # Parse and update the specific checkbox
+        mark = "x" if checked else " "
+        # Simple implementation - in production use proper markdown parsing
+        # Look for task and update checkbox
+        task_pattern = f"### Task: {task_name}"
+        if task_pattern in content:
+            # Find and update the checkbox line
+            lines = content.split("\n")
+            for i, line in enumerate(lines):
+                if checkbox.lower().replace("_", " ") in line.lower() and (
+                    "[ ]" in line or "[x]" in line
+                ):
+                    lines[i] = line.replace("[ ]", f"[{mark}]").replace("[x]", f"[{mark}]")
+                    break
+            tasks_file.write_text("\n".join(lines))
+            return True
+
+        return False
+
+    async def update_project_plan(
+        self,
+        section: str,
+        item: str,
+        checked: bool,
+    ) -> bool:
+        """Update PROJECT_PLAN.md with progress.
+
+        Agents MUST keep project plan updated.
+
+        Args:
+            section: Section name in project plan
+            item: Item description
+            checked: Whether to mark complete
+
+        Returns:
+            True if update succeeded
+        """
+        plan_file = self.project_root / "PROJECT_PLAN.md"
+        if not plan_file.exists():
+            return False
+
+        content = plan_file.read_text()
+        mark = "x" if checked else " "
+
+        # Simple search and replace for checkbox items
+        old_marker = "[ ]" if checked else "[x]"
+        new_marker = f"[{mark}]"
+
+        # Look for the item and update its checkbox
+        lines = content.split("\n")
+        for i, line in enumerate(lines):
+            if item.lower() in line.lower() and old_marker in line:
+                lines[i] = line.replace(old_marker, new_marker, 1)
+                plan_file.write_text("\n".join(lines))
+                return True
+
+        return False
 
 
 class PhaseAgent(BaseAgent):

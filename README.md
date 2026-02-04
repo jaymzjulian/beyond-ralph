@@ -1,105 +1,144 @@
-# Beyond Ralph
+# Beyond Ralph - True Autonomous Coding
 
-> True Autonomous Coding - Multi-agent orchestration for Claude Code
+A Claude Code plugin that implements fully autonomous multi-agent development using the "Spec and Interview Coder" methodology.
 
 ## What is Beyond Ralph?
 
-Beyond Ralph is a Claude Code plugin that enables fully autonomous multi-agent development. It implements the "Spec and Interview Coder" methodology, where:
-
-1. **Specification Ingestion** - The system ingests your project specification
-2. **Deep Interview** - Thorough questioning to eliminate ambiguity
-3. **Complete Planning** - Detailed, modular project plans with milestones
-4. **Autonomous Implementation** - Self-coordinating agents implement features
-5. **Rigorous Validation** - Every implementation is validated by a separate agent
-
-## Key Principles
-
-- **No Agent Trust** - Every agent's work is validated by another agent
-- **Quota Awareness** - Automatically pauses when nearing usage limits
-- **Knowledge Sharing** - Agents share learnings through a knowledge base
-- **Complete Records** - Every task tracked with 5 checkboxes (Planned → Live tested)
-- **Self-Contained** - Ships everything it needs, no external dependencies
+Beyond Ralph runs **inside Claude Code** as an orchestrator that spawns child Claude Code sessions to autonomously implement projects from specifications. It's NOT a separate CLI - it's a plugin that extends Claude Code itself.
 
 ## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/beyond-ralph.git
-cd beyond-ralph
+# Install the package (makes skills and hooks available to Claude Code)
+pip install -e .
 
-# Install with uv
-uv sync
-
-# Or install as a package
-uv pip install .
+# Copy skill files to your Claude Code config (optional, for user-level access)
+cp -r .claude/skills/* ~/.claude/skills/
+cp -r .claude/hooks/* ~/.claude/hooks/
 ```
 
-## Quick Start
+## Usage
 
-```bash
-# Start a new autonomous project
-beyond-ralph start --spec path/to/SPEC.md
+Start a Claude Code session and use the skills:
 
-# Check quota status
-br-quota
+```
+# In Claude Code:
+> /beyond-ralph SPEC.md
 
-# Resume a paused project
-beyond-ralph resume
+# Check status:
+> /beyond-ralph-status
+
+# Resume after pause:
+> /beyond-ralph-resume
 ```
 
-## Requirements
+## How It Works
 
-- Python 3.11+
-- Claude Code CLI installed and configured
-- uv package manager
+### Architecture
+
+Beyond Ralph follows a strict orchestrator pattern:
+
+1. **You run Claude Code normally**
+2. **Invoke `/beyond-ralph` with your spec**
+3. **Claude Code becomes the orchestrator** and spawns child sessions
+4. **Child sessions do actual work** (coding, testing, reviewing)
+5. **Orchestrator validates** using the trust model
+
+### 8-Phase Methodology
+
+1. **SPEC_INGESTION** - Analyze the provided specification
+2. **INTERVIEW** - Interview user extensively with AskUserQuestion
+3. **SPEC_CREATION** - Create modular specification documents
+4. **PLANNING** - Create detailed project plan with milestones
+5. **REVIEW** - Review for uncertainties, loop back if needed
+6. **VALIDATION** - Separate agent validates the plan
+7. **IMPLEMENTATION** - Implement with test-driven development
+8. **TESTING** - Validate with separate testing agents
+
+### Trust Model
+
+No agent validates its own work:
+
+- **Coding Agent** implements features
+- **Testing Agent** (separate session) validates implementation
+- **Code Review Agent** (separate session) reviews code quality
+- **Orchestrator** validates all evidence
+
+### Quota Management
+
+Before spawning any child agent, Beyond Ralph checks `/usage`:
+
+- At **85% session OR weekly quota**: Pause all work
+- Check every **10 minutes** while paused
+- Resume automatically when quota resets
+
+### Record Keeping
+
+Every task has 5 checkboxes that must ALL be checked:
+
+- [ ] **Planned** - Implementation approach defined
+- [ ] **Implemented** - Code written
+- [ ] **Mock Tested** - Unit tests pass
+- [ ] **Integration Tested** - CI/integration tests pass
+- [ ] **Live Tested** - Tested in real environment
+
+**100% completion required** - anything less is unacceptable.
+
+### Knowledge Sharing
+
+All agents share knowledge via `beyondralph_knowledge/`:
+
+- Each entry includes the session UUID that created it
+- Agents check knowledge base before asking orchestrator
+- Enables context persistence across sessions
+
+## Configuration
+
+### Safemode
+
+By default, child agents use `--dangerously-skip-permissions`.
+To require permission prompts:
+
+```
+> /beyond-ralph --safemode SPEC.md
+```
+
+### Autonomous Installation
+
+If enabled, agents can install dependencies automatically:
+
+```
+> /beyond-ralph --auto-install SPEC.md
+```
 
 ## Project Structure
 
 ```
-beyond-ralph/
-├── src/beyond_ralph/      # Main package
-│   ├── core/              # Orchestrator and session management
-│   ├── agents/            # Agent definitions
-│   ├── skills/            # Claude Code skills
-│   ├── hooks/             # Claude Code hooks
-│   └── utils/             # Utilities
-├── tests/                 # Test suite
-├── docs/                  # Documentation
-├── records/               # Task tracking per module
-└── beyondralph_knowledge/ # Shared knowledge base
+.beyond_ralph/          # State and configuration
+  state.json            # Current orchestrator state
+
+beyondralph_knowledge/  # Shared knowledge base
+  *.md                  # Knowledge entries with YAML frontmatter
+
+records/                # Task tracking
+  [module]/             # Per-module task lists
+    tasks.md            # Tasks with 5 checkboxes each
 ```
 
-## Documentation
+## Utilities
 
-- [User Guide](docs/user/README.md)
-- [Developer Guide](docs/developer/README.md)
-- [API Reference](docs/developer/api.md)
-
-## Development
+Check quota directly:
 
 ```bash
-# Install dev dependencies
-uv sync --all-extras
-
-# Run tests
-uv run pytest
-
-# Type check
-uv run mypy src
-
-# Lint and format
-uv run ruff check src tests
-uv run ruff format src tests
+br-quota
 ```
+
+## Requirements
+
+- Claude Code CLI installed and authenticated
+- Python 3.11+
+- pexpect (for quota checking)
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Contributing
-
-Contributions welcome! Please read the [contributing guidelines](CONTRIBUTING.md) first.
-
----
-
-*Built with Claude Code, for Claude Code.*
+MIT

@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m beyond_ralph.hooks.stop_handler"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m beyond_ralph.hooks.quota_check"
+          }
+        ]
+      }
+    ]
+  }
+}

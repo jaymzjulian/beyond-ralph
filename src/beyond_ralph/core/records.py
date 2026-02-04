@@ -1,11 +1,12 @@
 """Records System for Beyond Ralph.
 
-Handles task tracking with 5 checkboxes per task:
+Handles task tracking with 6 checkboxes per task:
 - Planned
 - Implemented
 - Mock tested
 - Integration tested
 - Live tested
+- Spec Compliant (verified by separate agent that implementation matches spec)
 """
 
 import re
@@ -14,7 +15,6 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
-
 
 # Default records location
 DEFAULT_RECORDS_PATH = Path("records")
@@ -28,6 +28,7 @@ class Checkbox(Enum):
     MOCK_TESTED = "mock_tested"
     INTEGRATION_TESTED = "integration_tested"
     LIVE_TESTED = "live_tested"
+    SPEC_COMPLIANT = "spec_compliant"  # Verified by separate agent
 
 
 CHECKBOX_LABELS = {
@@ -36,12 +37,19 @@ CHECKBOX_LABELS = {
     Checkbox.MOCK_TESTED: "Mock tested",
     Checkbox.INTEGRATION_TESTED: "Integration tested",
     Checkbox.LIVE_TESTED: "Live tested",
+    Checkbox.SPEC_COMPLIANT: "Spec compliant",
 }
 
 
 @dataclass
 class Task:
-    """A task with 5 checkboxes."""
+    """A task with 6 checkboxes.
+
+    The 6th checkbox (SPEC_COMPLIANT) is verified by a SEPARATE agent
+    that confirms the implementation matches what the spec says.
+    This is critical for catching cases where tests pass but the
+    implementation doesn't match requirements.
+    """
 
     id: str
     module: str
@@ -51,6 +59,7 @@ class Task:
     notes: str = ""
     implementation_agent: str | None = None
     validation_agent: str | None = None
+    spec_compliance_agent: str | None = None  # Agent that verified spec compliance
     evidence_path: str | None = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
@@ -58,11 +67,11 @@ class Task:
     def __post_init__(self) -> None:
         """Initialize checkboxes if not provided."""
         if not self.checkboxes:
-            self.checkboxes = {cb: False for cb in Checkbox}
+            self.checkboxes = dict.fromkeys(Checkbox, False)
 
     @property
     def is_complete(self) -> bool:
-        """Check if all 5 checkboxes are checked."""
+        """Check if all 6 checkboxes are checked."""
         return all(self.checkboxes.values())
 
     @property
@@ -72,8 +81,8 @@ class Task:
 
     @property
     def completion_fraction(self) -> str:
-        """Return completion as X/5 string."""
-        return f"{self.completion_count}/5"
+        """Return completion as X/6 string."""
+        return f"{self.completion_count}/6"
 
     def to_markdown(self) -> str:
         """Convert task to Markdown format."""

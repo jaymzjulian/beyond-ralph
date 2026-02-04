@@ -79,6 +79,7 @@ dev = [
 [project.scripts]
 beyond-ralph = "beyond_ralph.cli:main"
 br-quota = "beyond_ralph.utils.quota_checker:main"
+br-live-tests = "beyond_ralph.testing.claude_driver:main"
 
 [project.entry-points."claude_code.skills"]
 beyond-ralph = "beyond_ralph.skills:register_skills"
@@ -142,7 +143,12 @@ addopts = [
     "--cov=beyond_ralph",
     "--cov-report=term-missing",
     "--cov-report=html:htmlcov",
-    "--cov-fail-under=80",
+    "--cov-fail-under=90",  # Target is 90% coverage
+]
+markers = [
+    "integration: marks tests as integration tests (may call live services)",
+    "live: marks tests that spawn real Claude CLI sessions (require quota)",
+    "slow: marks tests that take longer than 30 seconds to run",
 ]
 
 [tool.coverage.run]

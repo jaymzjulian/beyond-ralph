@@ -426,7 +426,7 @@ logger.error("Session %s failed: %s", session.uuid, error)
 
 ### Test Categories and Checkboxes
 
-Every feature MUST have all five checkboxes checked:
+Every feature MUST have all six checkboxes checked:
 
 ```markdown
 - [x] Planned - design documented
@@ -434,7 +434,10 @@ Every feature MUST have all five checkboxes checked:
 - [x] Mock tested - unit tests pass
 - [x] Integration tested - integration tests pass
 - [x] Live tested - works in real Claude Code environment
+- [x] Spec compliant - verified by SEPARATE agent that implementation matches spec
 ```
+
+**Note**: The Spec Compliant checkbox is verified by a SpecComplianceAgent that is DIFFERENT from both the implementation agent and the testing agent. This catches cases where tests pass but the implementation doesn't match requirements.
 
 ### Test Structure
 

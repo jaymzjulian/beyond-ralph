@@ -195,9 +195,19 @@ class SkillHandler:
 
 ## Testing Requirements
 
-- Test plugin manifest validation
-- Test skill loading and invocation
-- Test hook registration
-- Test output streaming format
-- Test configuration loading
-- Test both installation methods
+| Test Type | Coverage |
+|-----------|----------|
+| Unit tests | Manifest validation, config loading |
+| Integration tests | Skill invocation, hook registration |
+| Live tests | Output streaming, full installation |
+
+---
+
+## Checkboxes
+
+- [x] Planned
+- [ ] Implemented
+- [ ] Mock tested
+- [ ] Integration tested
+- [ ] Live tested
+- [ ] Spec Compliant

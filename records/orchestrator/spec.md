@@ -11,7 +11,7 @@ Main control loop implementing ralph-loop persistence, phase management, agent c
 ## Requirements
 
 ### R1: Ralph-Loop Persistence
-- Continue until ALL tasks have 5/5 checkboxes
+- Continue until ALL tasks have 6/6 checkboxes (including Spec Compliant)
 - Use Stop hook for persistence within Claude Code
 - Only pause for: quota limits, fatal errors, user interrupt
 - Very aggressive - do not stop for minor issues
@@ -60,8 +60,19 @@ class Orchestrator:
 
 ## Testing Requirements
 
-- Unit test each method
-- Integration test with mock agents
-- Test compaction recovery
-- Test phase transitions
-- Test dynamic plan updates
+| Test Type | Coverage |
+|-----------|----------|
+| Unit tests | Phase transitions, state management |
+| Integration tests | Multi-agent coordination |
+| Live tests | Real Claude Code sessions |
+
+---
+
+## Checkboxes
+
+- [x] Planned
+- [x] Implemented
+- [x] Mock tested (93% coverage)
+- [ ] Integration tested
+- [ ] Live tested
+- [ ] Spec Compliant

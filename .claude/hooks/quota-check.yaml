@@ -1,0 +1,14 @@
+name: beyond-ralph-quota-check
+description: Check quota before spawning child agents - blocks if >= 85%
+event: PreToolCall
+
+# Match only when spawning new claude sessions
+match:
+  tool: Bash
+  command_pattern: "^claude\\s+"
+
+# Run Python script to check quota - returns exit code 1 to block
+command: python -c "from beyond_ralph.hooks.quota_check import check_quota_before_spawn; exit(check_quota_before_spawn())"
+
+# Block the tool call if quota exceeded
+blocking: true

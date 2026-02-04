@@ -22,6 +22,21 @@ from beyond_ralph.agents.base import (
     PhaseAgent,
     TrustModelAgent,
 )
+from beyond_ralph.agents.phase_agents import (
+    PHASE_AGENTS,
+    SPECIALIZED_AGENTS,
+    ImplementationAgent,
+    InterviewAgent,
+    PlanningAgent,
+    SpecAgent,
+    SpecComplianceAgent,
+    SpecCreationAgent,
+    TestingValidationAgent,
+    UncertaintyReviewAgent,
+    ValidationAgent,
+    get_phase_agent,
+    get_specialized_agent,
+)
 from beyond_ralph.agents.research_agent import (
     DiscoveredTool,
     ResearchAgent,
@@ -54,4 +69,19 @@ __all__ = [
     "ReviewItem",
     "ReviewResult",
     "ReviewSeverity",
+    # Phase Agents
+    "PHASE_AGENTS",
+    "SPECIALIZED_AGENTS",
+    "get_phase_agent",
+    "get_specialized_agent",
+    "SpecAgent",
+    "InterviewAgent",
+    "SpecCreationAgent",
+    "PlanningAgent",
+    "UncertaintyReviewAgent",
+    "ValidationAgent",
+    "ImplementationAgent",
+    "TestingValidationAgent",
+    # Specialized Agents
+    "SpecComplianceAgent",
 ]

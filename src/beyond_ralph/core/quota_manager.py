@@ -11,7 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-
 # Quota threshold - PAUSE at this level
 QUOTA_THRESHOLD = 85
 
@@ -84,13 +83,20 @@ class QuotaManager:
     async def _check_via_cli(self) -> QuotaStatus:
         """Check quota by invoking claude command.
 
+        Runs in a temp directory to avoid polluting current session history.
+
         Returns:
             QuotaStatus with current levels.
         """
+        import tempfile
+
         session_pct = 0.0
         weekly_pct = 0.0
 
         try:
+            # Create temp dir to run in (avoids polluting session history)
+            temp_dir = tempfile.mkdtemp(prefix="br_quota_")
+
             # Try to run claude with usage check
             # The exact command may vary based on Claude Code version
             result = subprocess.run(
@@ -98,7 +104,15 @@ class QuotaManager:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                cwd=temp_dir,  # Run in temp dir
             )
+
+            # Clean up temp dir
+            import shutil
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception:
+                pass
 
             output = result.stdout
 

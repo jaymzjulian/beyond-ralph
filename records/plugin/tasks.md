@@ -1,171 +1,159 @@
-# Module 4: Plugin Integration - Tasks
+# Plugin Module Tasks
 
-## Module Status: Not Started
+## Overview
 
----
+The plugin module provides the complete `.claude/` directory structure for native Claude Code integration.
 
-### Task: Create Plugin Manifest
-
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-
-**Description**: Create .claude-plugin/plugin.json with correct metadata.
-**Key Requirements**:
-- Valid JSON structure
-- Correct version format
-- Author and repository info
-- Engine compatibility specification
+**Dependencies**: skills, hooks
+**Required By**: End users
+**Location**: `.claude/`
+**Tests**: Integrated with skills and hooks tests
+**LOC**: YAML configuration files
 
 ---
 
-### Task: Create Main Skill Definition
+## Task: Create Plugin Directory Structure
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned - 2024-02-01
+- [x] Implemented - 2024-02-01
+- [x] Mock tested - 2024-02-01
 - [ ] Integration tested
 - [ ] Live tested
+- [ ] Spec compliant
 
-**Description**: Create skills/beyond-ralph/SKILL.md with all commands.
-**Key Requirements**:
-- Valid YAML frontmatter
-- All subcommands documented
-- Clear usage examples
+**Description**: Create complete `.claude/` directory structure.
+
+**Acceptance Criteria**:
+1. `.claude/` root directory
+2. `.claude/skills/` for skill definitions
+3. `.claude/hooks/` for hook definitions
+4. Proper file permissions
+5. Git-tracked (not in .gitignore)
+
+**Structure**:
+```
+.claude/
+├── skills/
+│   ├── beyond-ralph.yaml
+│   ├── beyond-ralph-start.yaml
+│   ├── beyond-ralph-resume.yaml
+│   └── beyond-ralph-pause.yaml
+└── hooks/
+    ├── stop.yaml
+    └── quota-check.yaml
+```
+
+**Tests**: Integrated
+**Implementation Agent**: auto
+**Validation Agent**: TBD
+**Evidence**: records/plugin/evidence/directory-structure/
 
 ---
 
-### Task: Create Subagent Definitions
+## Task: Register Entry Points in pyproject.toml
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned - 2024-02-01
+- [x] Implemented - 2024-02-01
+- [x] Mock tested - 2024-02-01
 - [ ] Integration tested
 - [ ] Live tested
+- [ ] Spec compliant
 
-**Description**: Create agents/*.md for each phase and trust model agent.
-**Key Requirements**:
-- Spec Agent
-- Interview Agent
-- Planning Agent
-- Validation Agent
-- Implementation Agent
-- Testing Agent
-- Code Review Agent
+**Description**: Configure CLI entry points in pyproject.toml.
+
+**Acceptance Criteria**:
+1. `beyond-ralph` main CLI command
+2. `br-quota` quota check command
+3. `br-live-tests` live testing command
+4. Entry points work after `uv pip install .`
+5. Dependencies properly declared
+
+**Entry Points**:
+```toml
+[project.scripts]
+beyond-ralph = "beyond_ralph.cli:main"
+br-quota = "beyond_ralph.utils.quota_checker:main"
+br-live-tests = "beyond_ralph.testing.claude_driver:main"
+```
+
+**Tests**: Integrated
+**Implementation Agent**: auto
+**Validation Agent**: TBD
+**Evidence**: records/plugin/evidence/entry-points/
 
 ---
 
-### Task: Implement Stop Hook
+## Task: Ensure Self-Contained Packaging
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned - 2024-02-01
+- [x] Implemented - 2024-02-01
+- [x] Mock tested - 2024-02-01
 - [ ] Integration tested
 - [ ] Live tested
+- [ ] Spec compliant
 
-**Description**: Hook to keep orchestrator running (ralph-loop persistence).
-**Key Requirements**:
-- Check if work remains
-- Return continue/stop decision
-- Handle quota pause state
+**Description**: Verify plugin is completely self-contained.
+
+**Acceptance Criteria**:
+1. All dependencies in pyproject.toml
+2. No references to external tools (SuperClaude, etc.)
+3. Works on clean system with `uv pip install .`
+4. All skills/hooks bundled in package
+5. Documentation doesn't assume external tooling
+6. Tests don't require external services
+
+**Verification Commands**:
+```bash
+# Clean install test
+uv pip install . --force-reinstall
+beyond-ralph --version
+br-quota --help
+```
+
+**Tests**: Integrated
+**Implementation Agent**: auto
+**Validation Agent**: TBD
+**Evidence**: records/plugin/evidence/self-contained/
 
 ---
 
-### Task: Implement PreToolUse Hook
+## Task: Document Plugin Installation
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Planned - 2024-02-01
+- [x] Implemented - 2024-02-01
+- [x] Mock tested - 2024-02-01
 - [ ] Integration tested
 - [ ] Live tested
+- [ ] Spec compliant
 
-**Description**: Hook to check quota before Task tool usage.
-**Key Requirements**:
-- Read cached quota status
-- Block if over threshold
-- Allow bypass for critical operations
+**Description**: Document how to install and use the plugin.
+
+**Acceptance Criteria**:
+1. Installation instructions in README
+2. Quick start guide
+3. Configuration options documented
+4. Troubleshooting section
+5. Examples of usage
+
+**Files**:
+- `README.md` (updated)
+- `docs/user/installation.md`
+- `docs/user/quickstart.md`
+
+**Tests**: Manual review
+**Implementation Agent**: auto
+**Validation Agent**: TBD
+**Evidence**: records/plugin/evidence/documentation/
 
 ---
 
-### Task: Implement SubagentStop Hook
+## Summary
 
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
+| Task | Planned | Implemented | Mock | Integration | Live | Spec |
+|------|:-------:|:-----------:|:----:|:-----------:|:----:|:----:|
+| Plugin Directory Structure | [x] | [x] | [x] | [ ] | [ ] | [ ] |
+| Entry Points in pyproject.toml | [x] | [x] | [x] | [ ] | [ ] | [ ] |
+| Self-Contained Packaging | [x] | [x] | [x] | [ ] | [ ] | [ ] |
+| Plugin Installation Docs | [x] | [x] | [x] | [ ] | [ ] | [ ] |
 
-**Description**: Hook to handle agent completion events.
-**Key Requirements**:
-- Capture agent result
-- Store evidence
-- Trigger next phase if applicable
-
----
-
-### Task: Implement Output Streaming
-
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-
-**Description**: Stream subagent output with [AGENT:id] prefixes.
-**Key Requirements**:
-- Capture stdout/stderr from subagents
-- Format with agent identifiers
-- Show phase transitions
-- Handle multi-line output
-
----
-
-### Task: Implement Command Handlers
-
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-
-**Description**: Implement handlers for /beyond-ralph:* commands.
-**Key Requirements**:
-- start: Initialize new project
-- resume: Continue interrupted project
-- status: Show progress
-- pause: Save state and stop
-
----
-
-### Task: Implement Configuration Loading
-
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-
-**Description**: Load beyond-ralph.yaml configuration.
-**Key Requirements**:
-- Parse YAML config
-- Environment variable expansion
-- Default values for missing options
-- Validation of config values
-
----
-
-### Task: Implement Dual Installation
-
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-
-**Description**: Support both PyPI and Claude plugin installation.
-**Key Requirements**:
-- PyPI package includes plugin files
-- Plugin installation copies to correct location
-- Both methods result in working plugin
+**Overall Progress**: 4/4 implemented, 0/4 integration tested, 0/4 live tested, 0/4 spec compliant

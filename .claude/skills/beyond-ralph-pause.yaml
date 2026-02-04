@@ -1,0 +1,61 @@
+name: beyond-ralph-pause
+description: Pause the current Beyond Ralph autonomous development project
+trigger: /beyond-ralph-pause
+
+instructions: |
+  Pause the current Beyond Ralph autonomous development project.
+
+  ## PAUSE PROCEDURE
+
+  1. Read current state from .beyond_ralph/state.json
+  2. If no project is running, report that there's nothing to pause
+  3. If project is already paused, report current pause status
+  4. If project is running:
+     - Update state to "paused"
+     - Record pause timestamp
+     - Save state file
+     - Report successful pause
+
+  ## PAUSE STATE
+
+  When paused, the state.json should contain:
+  ```json
+  {
+    "status": "paused",
+    "paused_at": "<ISO timestamp>",
+    "paused_phase": <phase number>,
+    "paused_by": "user",
+    "can_resume": true
+  }
+  ```
+
+  ## GRACEFUL PAUSE
+
+  - Do NOT interrupt running child agents mid-operation
+  - Allow current agent to complete its work
+  - Mark state as paused AFTER agent completes
+  - If a child agent is running, report its status
+
+  ## QUOTA-TRIGGERED PAUSE
+
+  If the pause was triggered by quota limit:
+  - Report quota status
+  - Indicate when quota might reset
+  - Recommend resuming with /beyond-ralph-resume after reset
+
+  ## MANUAL PAUSE
+
+  If user manually pauses:
+  - Confirm the pause
+  - Show current progress
+  - Remind user to use /beyond-ralph-resume to continue
+
+  ## REPORT FORMAT
+
+  After pausing, report:
+  - Previous state and current phase
+  - Pause timestamp
+  - Current task progress (if any)
+  - How to resume (/beyond-ralph-resume)
+
+  Present a clear confirmation message with next steps.

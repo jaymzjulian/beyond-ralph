@@ -70,7 +70,19 @@ class ResearchAgent:
 
 ## Testing Requirements
 
-- Mock web search
-- Mock GitHub API
-- Test fallback behavior
-- Test installation verification
+| Test Type | Coverage |
+|-----------|----------|
+| Unit tests | Mock web search, mock GitHub API |
+| Integration tests | Fallback behavior |
+| Live tests | Real installation verification |
+
+---
+
+## Checkboxes
+
+- [x] Planned
+- [x] Implemented
+- [x] Mock tested (94% coverage)
+- [ ] Integration tested
+- [ ] Live tested
+- [ ] Spec Compliant
