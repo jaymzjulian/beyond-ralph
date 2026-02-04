@@ -401,6 +401,9 @@ class TestCheckQuotaViaCLIMocked:
         mock_child.expect.return_value = 0
         mock_child.isalive.return_value = False
         mock_child.pid = 12345
+        # Mock before/after attributes for string concatenation
+        mock_child.before = ""
+        mock_child.after = ""
 
         # Simulate output matching actual Claude /usage format
         sample_output = """
@@ -460,6 +463,9 @@ Esc to cancel
         mock_child.expect.return_value = 0
         mock_child.isalive.return_value = False
         mock_child.pid = 12345
+        # Mock before/after attributes for string concatenation
+        mock_child.before = ""
+        mock_child.after = ""
 
         # Simulate output indicating limited (90% session usage)
         sample_output = """
@@ -697,6 +703,8 @@ class TestCheckQuotaViaCLIUsageParsing:
         mock_child = MagicMock()
         mock_child.expect.return_value = 0
         mock_child.isalive.return_value = False
+        mock_child.before = ""
+        mock_child.after = ""
 
         # Output with tab character indicating usage section
         sample_output = """
@@ -733,6 +741,8 @@ class TestCheckQuotaViaCLIUsageParsing:
         mock_child = MagicMock()
         mock_child.expect.return_value = 0
         mock_child.isalive.return_value = False
+        mock_child.before = ""
+        mock_child.after = ""
 
         # Output without clear "used" pattern but with session/week context
         sample_output = """
@@ -767,6 +777,8 @@ class TestCheckQuotaViaCLIUsageParsing:
         mock_child = MagicMock()
         mock_child.expect.return_value = 0
         mock_child.isalive.return_value = False
+        mock_child.before = ""
+        mock_child.after = ""
 
         # Output with Sonnet weekly (should be excluded)
         sample_output = """
@@ -951,7 +963,7 @@ class TestEnvironmentVariables:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("BEYOND_RALPH_QUOTA", "not-a-number")
 
-        with patch("beyond_ralph.utils.quota_checker.check_quota_via_print_mode") as mock_check:
+        with patch("beyond_ralph.utils.quota_checker.check_quota_via_cli") as mock_check:
             mock_check.return_value = QuotaStatus(
                 session_percent=50.0,
                 weekly_percent=40.0,
@@ -960,7 +972,7 @@ class TestEnvironmentVariables:
             )
             result = get_quota_status(force_refresh=True)
 
-            # Should fall through to regular check
+            # Should fall through to CLI check (print mode is skipped)
             mock_check.assert_called()
 
     def test_beyond_ralph_unlimited_env(self, tmp_path, monkeypatch):
@@ -1133,6 +1145,8 @@ class TestCheckQuotaViaCLIEOF:
         mock_child.expect.return_value = 0
         mock_child.isalive.return_value = False
         mock_child.pid = 12345
+        mock_child.before = ""
+        mock_child.after = ""
 
         # First call returns data, second raises EOF
         call_count = [0]
@@ -1230,6 +1244,8 @@ class TestCheckQuotaCleanup:
         mock_child = MagicMock()
         mock_child.expect.return_value = 0
         mock_child.isalive.return_value = False
+        mock_child.before = ""
+        mock_child.after = ""
 
         # Provide some output to parse
         sample_output = "session 50% used weekly 40% used"

@@ -189,8 +189,53 @@ def _kill_process_tree(pid: int) -> None:
             pass
 
 
+def _wait_for_output_pattern(
+    child,
+    patterns: list[str],
+    timeout: float = 30,
+    read_size: int = 50000
+) -> tuple[str, bool]:
+    """Wait for output containing any of the given patterns.
+
+    Uses output-based detection instead of timing.
+
+    Args:
+        child: pexpect spawn object
+        patterns: List of strings to look for (case-insensitive)
+        timeout: Maximum time to wait
+        read_size: Buffer size for reading
+
+    Returns:
+        Tuple of (all_output, pattern_found)
+    """
+    all_output = ""
+    start_time = time.time()
+    patterns_lower = [p.lower() for p in patterns]
+
+    while time.time() - start_time < timeout:
+        try:
+            chunk = child.read_nonblocking(size=read_size, timeout=0.5)
+            all_output += chunk
+            output_lower = all_output.lower()
+
+            # Check if any pattern is found
+            for pattern in patterns_lower:
+                if pattern in output_lower:
+                    return all_output, True
+
+        except Exception:
+            # TIMEOUT or other - keep trying
+            pass
+
+    return all_output, False
+
+
 def _single_quota_check_attempt() -> QuotaStatus:
     """Single attempt to check quota via CLI.
+
+    Uses OUTPUT-BASED detection: waits for specific patterns that indicate
+    the CLI is ready before sending commands, and waits for usage data
+    before parsing results.
 
     Returns:
         QuotaStatus with results or unknown status on failure.
@@ -198,6 +243,57 @@ def _single_quota_check_attempt() -> QuotaStatus:
     import pexpect
 
     child = None
+    all_output = ""
+
+    def read_all_available() -> str:
+        """Read all currently available output."""
+        nonlocal all_output
+        collected = ""
+        for _ in range(100):  # Try many times to drain buffer
+            try:
+                chunk = child.read_nonblocking(size=50000, timeout=0.05)
+                collected += chunk
+                all_output += chunk
+            except pexpect.TIMEOUT:
+                break
+            except Exception:
+                break
+        return collected
+
+    def wait_for_prompt_ready(timeout: float = 15.0, max_iterations: int = 150) -> bool:
+        """Wait for the input prompt to be ready.
+
+        The CLI is ready when we see the prompt line stabilize
+        (no new output for a brief period after seeing the prompt indicator).
+
+        Returns True if ready, False on timeout.
+        """
+        nonlocal all_output
+        import time as time_module
+        deadline = time_module.time() + timeout
+        last_len = 0
+        stable_count = 0
+        iterations = 0
+
+        while time_module.time() < deadline and iterations < max_iterations:
+            iterations += 1
+            read_all_available()
+
+            # Check if output contains prompt indicator
+            if '❯' in all_output or '>' in all_output:
+                # Wait for output to stabilize (same length for 3 checks)
+                if len(all_output) == last_len:
+                    stable_count += 1
+                    if stable_count >= 3:
+                        return True
+                else:
+                    stable_count = 0
+                    last_len = len(all_output)
+
+            time_module.sleep(0.2)
+
+        return False
+
     try:
         # Set terminal environment
         os.environ['TERM'] = 'xterm-256color'
@@ -205,60 +301,97 @@ def _single_quota_check_attempt() -> QuotaStatus:
         # ALWAYS use home directory - it's trusted
         home = os.path.expanduser("~")
 
-        # Start claude interactively with generous timeout
+        # Start claude interactively
         child = pexpect.spawn(
             'claude',
             encoding='utf-8',
-            timeout=90,  # Generous timeout
-            dimensions=(60, 180),  # Wide terminal for output
+            timeout=90,
+            dimensions=(60, 180),
             cwd=home,
             env={**os.environ, 'TERM': 'xterm-256color'}
         )
 
-        all_output = ""
+        # Phase 1: Wait for initial content (trust prompt or ready state)
+        # Use expect() to properly wait for patterns
+        try:
+            index = child.expect(
+                ['trust', 'Trust', '❯', pexpect.TIMEOUT],
+                timeout=10
+            )
+            all_output += child.before + (child.after if isinstance(child.after, str) else '')
+        except pexpect.TIMEOUT:
+            all_output += child.before if child.before else ""
 
-        # Wait for initial prompt and drain
-        time.sleep(4)
-        for _ in range(6):
-            try:
-                chunk = child.read_nonblocking(size=50000, timeout=1)
-                all_output += chunk
-            except pexpect.TIMEOUT:
-                break
-
-        # Handle trust prompt if present
-        if 'trust' in all_output.lower() or 'Yes, I trust' in all_output:
-            child.send('1')  # Accept trust
-            time.sleep(0.3)
+        # Phase 2: Handle trust prompt if detected
+        if 'trust' in all_output.lower():
+            # Send '1' to select "Yes, I trust this folder"
+            child.send('1')
+            time.sleep(0.1)
+            # Send Enter to confirm the selection
             child.send('\r')
-            time.sleep(5)  # Wait for main screen to load
 
-            # Drain main screen output
-            for _ in range(5):
-                try:
-                    chunk = child.read_nonblocking(size=50000, timeout=1)
-                    all_output += chunk
-                except pexpect.TIMEOUT:
-                    break
+            # Wait for the CLI to fully initialize after trust
+            # This is critical - the CLI redraws the entire screen
+            if not wait_for_prompt_ready(timeout=15.0):
+                return QuotaStatus.unknown("Timeout waiting for CLI after trust confirmation")
 
-        # Send /usage command
+        # Phase 3: Ensure the prompt is ready before sending command
+        read_all_available()
+        time.sleep(0.3)  # Brief pause for UI to settle
+        read_all_available()
+
+        # Clear any existing state with Escape
+        child.send('\x1b')
+        time.sleep(0.2)
+        read_all_available()
+
+        # Phase 4: Send /usage command
+        # Send the command, wait for autocomplete, Tab to accept, Enter to execute
         child.send('/usage')
-        time.sleep(0.5)
-        child.send('\r')  # Enter
+        time.sleep(0.3)  # Wait for autocomplete to appear
+        child.send('\t')  # Tab to accept the autocomplete
+        time.sleep(0.2)
+        child.send('\r')  # Enter to execute
 
-        # Wait for usage screen to fully load and render
-        time.sleep(12)
+        # Phase 5: Wait for usage output
+        # Look for "% used" pattern which appears in the usage screen
+        usage_found = False
+        deadline = time.time() + 20  # 20 second timeout
+        max_iterations = 200  # Safety limit for tests
 
-        # Read all available output
-        read_start = time.time()
-        while time.time() - read_start < 15:
+        iterations = 0
+        while time.time() < deadline and iterations < max_iterations:
+            iterations += 1
+            read_all_available()
+
+            # Check for usage data patterns - handle both "% used" and "%used"
+            output_lower = all_output.lower()
+            if '%used' in output_lower or '% used' in output_lower:
+                usage_found = True
+                # Read more to ensure we have complete data
+                time.sleep(0.5)
+                read_all_available()
+                time.sleep(0.3)
+                read_all_available()
+                break
+
+            # Also check for "Current session" and "Current week" headers
+            if 'current session' in output_lower and 'current week' in output_lower:
+                usage_found = True
+                time.sleep(0.5)
+                read_all_available()
+                break
+
+            time.sleep(0.2)
+
+        if not usage_found:
+            # Try one more time with a direct expect
             try:
-                chunk = child.read_nonblocking(size=50000, timeout=1)
-                all_output += chunk
+                child.expect(['%used', '% used', 'Current session', pexpect.TIMEOUT], timeout=5)
+                all_output += child.before + (child.after if isinstance(child.after, str) else '')
+                usage_found = True
             except pexpect.TIMEOUT:
-                break
-            except pexpect.EOF:
-                break
+                pass
 
         # Clean the output
         cleaned = strip_ansi(all_output)
@@ -270,7 +403,7 @@ def _single_quota_check_attempt() -> QuotaStatus:
 
         lines = cleaned.split('\n')
 
-        # Strategy 1: Look for "X% used" patterns with context
+        # Strategy 1: Look for "X% used" or "X%used" patterns with context
         for i, line in enumerate(lines):
             pct_match = re.search(r'(\d+(?:\.\d+)?)\s*%\s*used', line.lower())
             if pct_match:
@@ -489,12 +622,9 @@ def get_quota_status(force_refresh: bool = False) -> QuotaStatus:
         if cached is not None:
             return cached
 
-    # Try print mode first (simpler and more reliable)
-    status = check_quota_via_print_mode()
-
-    # If print mode failed, try interactive CLI mode as fallback
-    if status.is_unknown:
-        status = check_quota_via_cli()
+    # Use interactive CLI mode to check quota via /usage command
+    # Note: print mode doesn't work because Claude can't introspect its own quota
+    status = check_quota_via_cli()
 
     # Check for assume OK override (less safe, but useful for testing)
     if status.is_unknown and os.environ.get("BEYOND_RALPH_ASSUME_OK", "").strip() == "1":
