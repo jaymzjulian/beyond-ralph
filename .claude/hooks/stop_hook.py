@@ -169,6 +169,20 @@ def main():
 
     br_state = state.get("state", "unknown")
 
+    # Track iterations for safety (prevent truly infinite loops)
+    iteration = state.get("hook_iteration", 0) + 1
+    max_iterations = state.get("max_iterations", 100)  # Safety limit
+
+    if iteration > max_iterations:
+        print(f"🛑 Beyond Ralph: Max iterations ({max_iterations}) reached. Stopping.", file=sys.stderr)
+        state["state"] = "stopped"
+        state["stop_reason"] = "max_iterations"
+        write_state(state)
+        sys.exit(0)
+
+    # Update iteration counter
+    state["hook_iteration"] = iteration
+
     # If not running, allow exit
     if br_state not in ("running",):
         sys.exit(0)
