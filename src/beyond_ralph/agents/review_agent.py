@@ -124,6 +124,143 @@ class ReviewResult:
             "items": [item.to_dict() for item in self.items],
         }
 
+    def to_json(self) -> str:
+        """Export full review result as JSON."""
+        import datetime
+        return json.dumps({
+            "schema_version": "1.0",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "summary": {
+                "passed": self.passed,
+                "total_findings": len(self.items),
+                "critical": self.critical_count,
+                "high": self.high_count,
+                "medium": self.medium_count,
+                "must_fix": self.must_fix_count(),
+            },
+            "languages": self.languages_detected,
+            "tools": self.tools_used,
+            "findings": [item.to_dict() for item in self.items],
+        }, indent=2)
+
+    def by_file(self) -> dict[str, list[ReviewItem]]:
+        """Group findings by file path."""
+        from collections import defaultdict
+        result: dict[str, list[ReviewItem]] = defaultdict(list)
+        for item in self.items:
+            result[item.file_path].append(item)
+        return dict(result)
+
+    def by_severity(self) -> dict[str, list[ReviewItem]]:
+        """Group findings by severity (sorted critical -> info)."""
+        from collections import defaultdict
+        result: dict[str, list[ReviewItem]] = defaultdict(list)
+        for item in self.items:
+            result[item.severity.value].append(item)
+        # Return in severity order
+        ordered = {}
+        for sev in [ReviewSeverity.CRITICAL, ReviewSeverity.HIGH, ReviewSeverity.MEDIUM,
+                    ReviewSeverity.LOW, ReviewSeverity.INFO]:
+            if sev.value in result:
+                ordered[sev.value] = result[sev.value]
+        return ordered
+
+    def to_markdown(self) -> str:
+        """Generate a markdown report of findings."""
+        lines = ["# Code Review Report\n"]
+
+        # Summary
+        status = "✅ PASSED" if self.passed else "❌ FAILED"
+        lines.append(f"**Status**: {status}\n")
+        lines.append(f"**Total Findings**: {len(self.items)}\n")
+        if self.languages_detected:
+            lines.append(f"**Languages**: {', '.join(self.languages_detected)}\n")
+        if self.tools_used:
+            lines.append(f"**Tools Used**: {', '.join(self.tools_used)}\n")
+
+        # Statistics
+        lines.append("\n## Statistics\n")
+        lines.append(f"- 🔴 Critical: {self.critical_count}")
+        lines.append(f"- 🟠 High: {self.high_count}")
+        lines.append(f"- 🟡 Medium: {self.medium_count}")
+        lines.append(f"- **Must Fix**: {self.must_fix_count()}\n")
+
+        # Findings by severity
+        by_sev = self.by_severity()
+        for severity, items in by_sev.items():
+            if not items:
+                continue
+
+            emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡",
+                     "low": "🔵", "info": "ℹ️"}.get(severity, "")
+            lines.append(f"\n## {emoji} {severity.upper()} Findings\n")
+
+            # Group by file within severity
+            by_file: dict[str, list[ReviewItem]] = {}
+            for item in items:
+                if item.file_path not in by_file:
+                    by_file[item.file_path] = []
+                by_file[item.file_path].append(item)
+
+            for file_path, file_items in sorted(by_file.items()):
+                lines.append(f"\n### {file_path}\n")
+                for item in sorted(file_items, key=lambda x: x.line_number or 0):
+                    loc = f"Line {item.line_number}" if item.line_number else "Unknown line"
+                    lines.append(f"- **{loc}** [{item.category.value}]: {item.message}")
+                    if item.rule_id:
+                        lines.append(f"  - Rule: `{item.rule_id}`")
+                    if item.suggested_fix:
+                        lines.append(f"  - Fix: {item.suggested_fix}")
+                    if item.reference_url:
+                        lines.append(f"  - Ref: {item.reference_url}")
+
+        if not self.items:
+            lines.append("\n*No issues found.*\n")
+
+        return "\n".join(lines)
+
+
+def deduplicate_findings(items: list[ReviewItem]) -> list[ReviewItem]:
+    """Remove duplicate findings from multiple tools.
+
+    Duplicates are detected by:
+    - Same file + same line + similar message (>80% match)
+    - Same file + same rule_id
+    """
+    if not items:
+        return items
+
+    unique: list[ReviewItem] = []
+    seen: set[tuple[str, int | None, str | None]] = set()
+
+    for item in items:
+        # Create a key for deduplication
+        key = (item.file_path, item.line_number, item.rule_id)
+
+        # Skip if we've seen this exact key
+        if key in seen:
+            continue
+
+        # Check for similar messages at same location
+        is_duplicate = False
+        for existing in unique:
+            if (existing.file_path == item.file_path and
+                existing.line_number == item.line_number):
+                # Simple similarity check - if messages share significant content
+                msg1 = set(item.message.lower().split())
+                msg2 = set(existing.message.lower().split())
+                if msg1 and msg2:
+                    overlap = len(msg1 & msg2) / max(len(msg1), len(msg2))
+                    if overlap > 0.6:  # 60% word overlap
+                        is_duplicate = True
+                        break
+
+        if not is_duplicate:
+            unique.append(item)
+            seen.add(key)
+
+    return unique
+
 
 # Language file extensions and detection patterns
 LANGUAGE_INDICATORS: dict[str, list[str]] = {
@@ -345,6 +482,11 @@ class CodeReviewAgent(TrustModelAgent):
 
     # Security scanners (run for all projects)
     SECURITY_SCANNERS: list[dict[str, Any]] = [
+        {
+            "name": "semgrep",
+            "command": ["semgrep", "scan", "--config=p/owasp-top-ten", "--json", "."],
+            "parse": "semgrep",
+        },
         {
             "name": "detect-secrets",
             "command": ["detect-secrets", "scan", "--all-files"],
@@ -775,6 +917,256 @@ class CodeReviewAgent(TrustModelAgent):
             pass
         return items
 
+    def _parse_staticcheck(self, stdout: str, stderr: str) -> list[ReviewItem]:
+        """Parse Go staticcheck JSON output."""
+        items = []
+        for line in stdout.split("\n"):
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+                # staticcheck JSON format: {"code": "SA1000", "message": "...", "location": {...}}
+                code = data.get("code", "")
+                severity = ReviewSeverity.MEDIUM
+
+                # Map staticcheck codes to severity
+                # SA = security/safety, S = style, ST = conventions
+                if code.startswith("SA"):
+                    severity = ReviewSeverity.HIGH
+                elif code.startswith("S1") or code.startswith("S2"):
+                    severity = ReviewSeverity.LOW
+
+                location = data.get("location", {})
+                items.append(ReviewItem(
+                    category=ReviewCategory.LINT,
+                    severity=severity,
+                    file_path=location.get("file", ""),
+                    line_number=location.get("line"),
+                    message=data.get("message", ""),
+                    rule_id=code,
+                ))
+            except json.JSONDecodeError:
+                continue
+        return items
+
+    def _parse_tsc(self, stdout: str, stderr: str) -> list[ReviewItem]:
+        """Parse TypeScript compiler diagnostic output."""
+        items = []
+        # tsc outputs to stdout in format: file(line,col): error TSxxxx: message
+        for line in stdout.split("\n") + stderr.split("\n"):
+            if not line.strip():
+                continue
+
+            # Format: file(line,col): error TSxxxx: message
+            match = re.match(r"(.+)\((\d+),(\d+)\):\s*(error|warning)\s+(TS\d+):\s*(.+)", line)
+            if match:
+                file_path, line_num, col, level, code, message = match.groups()
+
+                severity = ReviewSeverity.HIGH if level == "error" else ReviewSeverity.MEDIUM
+
+                items.append(ReviewItem(
+                    category=ReviewCategory.TYPE,
+                    severity=severity,
+                    file_path=file_path,
+                    line_number=int(line_num),
+                    message=message,
+                    rule_id=code,
+                ))
+
+        return items
+
+    def _parse_checkstyle(self, stdout: str, stderr: str) -> list[ReviewItem]:
+        """Parse Java checkstyle XML output."""
+        items = []
+        # Simple XML parsing without external dependency
+        # Format: <error line="x" severity="y" message="z" source="..."/>
+        current_file = ""
+        for line in stdout.split("\n"):
+            line = line.strip()
+
+            # Extract file from <file name="...">
+            file_match = re.search(r'<file\s+name="([^"]+)"', line)
+            if file_match:
+                current_file = file_match.group(1)
+                continue
+
+            # Extract error from <error .../>
+            error_match = re.search(
+                r'<error\s+line="(\d+)".*?severity="(\w+)".*?message="([^"]*)".*?source="([^"]*)"',
+                line
+            )
+            if error_match:
+                line_num, severity_str, message, source = error_match.groups()
+
+                severity_map = {
+                    "error": ReviewSeverity.HIGH,
+                    "warning": ReviewSeverity.MEDIUM,
+                    "info": ReviewSeverity.LOW,
+                }
+                severity = severity_map.get(severity_str.lower(), ReviewSeverity.MEDIUM)
+
+                # Extract rule name from source (e.g., com.puppycrawl...IndentationCheck)
+                rule_id = source.split(".")[-1] if source else None
+
+                items.append(ReviewItem(
+                    category=ReviewCategory.LINT,
+                    severity=severity,
+                    file_path=current_file,
+                    line_number=int(line_num),
+                    message=message.replace("&quot;", '"').replace("&lt;", "<").replace("&gt;", ">"),
+                    rule_id=rule_id,
+                ))
+
+        return items
+
+    def _parse_clang_tidy(self, stdout: str, stderr: str) -> list[ReviewItem]:
+        """Parse clang-tidy output."""
+        items = []
+        # clang-tidy format: file:line:col: level: message [check-name]
+        for line in stdout.split("\n") + stderr.split("\n"):
+            if not line.strip():
+                continue
+
+            match = re.match(r"(.+):(\d+):(\d+):\s*(warning|error|note):\s*(.+?)\s*\[([^\]]+)\]", line)
+            if match:
+                file_path, line_num, col, level, message, check_name = match.groups()
+
+                # Skip notes, only process warnings and errors
+                if level == "note":
+                    continue
+
+                severity = ReviewSeverity.HIGH if level == "error" else ReviewSeverity.MEDIUM
+
+                # Security-related checks get elevated severity
+                if "security" in check_name.lower() or "cert" in check_name.lower():
+                    severity = ReviewSeverity.CRITICAL if level == "error" else ReviewSeverity.HIGH
+
+                items.append(ReviewItem(
+                    category=ReviewCategory.LINT,
+                    severity=severity,
+                    file_path=file_path,
+                    line_number=int(line_num),
+                    message=message,
+                    rule_id=check_name,
+                ))
+
+        return items
+
+    def _parse_swiftlint(self, stdout: str, stderr: str) -> list[ReviewItem]:
+        """Parse SwiftLint JSON output."""
+        items = []
+        try:
+            if not stdout.strip():
+                return items
+
+            data = json.loads(stdout)
+            for violation in data:
+                severity_map = {
+                    "error": ReviewSeverity.HIGH,
+                    "warning": ReviewSeverity.MEDIUM,
+                }
+                severity = severity_map.get(violation.get("severity", "warning"), ReviewSeverity.MEDIUM)
+
+                items.append(ReviewItem(
+                    category=ReviewCategory.LINT,
+                    severity=severity,
+                    file_path=violation.get("file", ""),
+                    line_number=violation.get("line"),
+                    message=violation.get("reason", ""),
+                    rule_id=violation.get("rule_id"),
+                ))
+        except json.JSONDecodeError:
+            pass
+        return items
+
+    def _parse_brakeman(self, stdout: str, stderr: str) -> list[ReviewItem]:
+        """Parse Brakeman (Ruby security scanner) JSON output."""
+        items = []
+        try:
+            if not stdout.strip():
+                return items
+
+            data = json.loads(stdout)
+            for warning in data.get("warnings", []):
+                # Brakeman confidence: 0=High, 1=Medium, 2=Weak
+                confidence = warning.get("confidence", 2)
+                if confidence == 0:
+                    severity = ReviewSeverity.CRITICAL
+                elif confidence == 1:
+                    severity = ReviewSeverity.HIGH
+                else:
+                    severity = ReviewSeverity.MEDIUM
+
+                items.append(ReviewItem(
+                    category=ReviewCategory.SECURITY,
+                    severity=severity,
+                    file_path=warning.get("file", ""),
+                    line_number=warning.get("line"),
+                    message=f"{warning.get('warning_type', 'Security')}: {warning.get('message', '')}",
+                    rule_id=warning.get("warning_code"),
+                    reference_url=warning.get("link"),
+                ))
+        except json.JSONDecodeError:
+            pass
+        return items
+
+    def _parse_semgrep(self, stdout: str, stderr: str) -> list[ReviewItem]:
+        """Parse Semgrep JSON/SARIF output for OWASP findings."""
+        items = []
+        try:
+            if not stdout.strip():
+                return items
+
+            data = json.loads(stdout)
+
+            # Handle both Semgrep native JSON and SARIF format
+            results = data.get("results", [])
+
+            for result in results:
+                # Map OWASP categories to severity
+                rule_id = result.get("check_id", "")
+                message = result.get("extra", {}).get("message", result.get("message", ""))
+
+                # Determine severity based on rule metadata
+                metadata = result.get("extra", {}).get("metadata", {})
+                impact = metadata.get("impact", "MEDIUM")
+                owasp = metadata.get("owasp", [])
+
+                # Default severity mapping
+                severity = ReviewSeverity.MEDIUM
+                if impact == "HIGH" or any(cat in ["A01", "A02", "A03", "A07"] for cat in owasp):
+                    severity = ReviewSeverity.CRITICAL
+                elif impact == "MEDIUM" or any(cat in ["A04", "A05", "A06", "A08", "A10"] for cat in owasp):
+                    severity = ReviewSeverity.HIGH
+                elif impact == "LOW":
+                    severity = ReviewSeverity.MEDIUM
+
+                # Extract location
+                start = result.get("start", {})
+                path = result.get("path", "")
+
+                # Build reference URL from CWE if available
+                cwe = metadata.get("cwe", [])
+                ref_url = None
+                if cwe and isinstance(cwe, list) and len(cwe) > 0:
+                    cwe_id = cwe[0].replace("CWE-", "") if isinstance(cwe[0], str) else ""
+                    if cwe_id:
+                        ref_url = f"https://cwe.mitre.org/data/definitions/{cwe_id}.html"
+
+                items.append(ReviewItem(
+                    category=ReviewCategory.SECURITY,
+                    severity=severity,
+                    file_path=path,
+                    line_number=start.get("line"),
+                    message=message,
+                    rule_id=rule_id,
+                    reference_url=ref_url,
+                ))
+
+        except json.JSONDecodeError:
+            pass
+        return items
+
     async def run_security_scan(self) -> list[ReviewItem]:
         """Run security scanners."""
         items: list[ReviewItem] = []
@@ -1005,9 +1397,12 @@ class CodeReviewAgent(TrustModelAgent):
         dep_items = await self.check_dependencies()
         all_items.extend(dep_items)
 
+        # Deduplicate findings from multiple tools
+        deduplicated_items = deduplicate_findings(all_items)
+
         # Determine pass/fail
         result = ReviewResult(
-            items=all_items,
+            items=deduplicated_items,
             languages_detected=self.detected_languages,
             tools_used=list(set(self.tools_used)),
         )

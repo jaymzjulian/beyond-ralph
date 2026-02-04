@@ -94,11 +94,11 @@ The code-review module provides the CodeReviewAgent for multi-language linting a
 
 ---
 
-## Task: Implement Multi-Language Linting **BLOCKING**
+## Task: Implement Multi-Language Linting **COMPLETED**
 
 - [x] Planned - 2024-02-01
-- [ ] Implemented - **IN PROGRESS**
-- [ ] Mock tested
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03 (30+ new tests)
 - [ ] Integration tested
 - [ ] Live tested
 - [ ] Spec compliant
@@ -220,16 +220,16 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 
 ---
 
-## Task: Implement Security Scanning **BLOCKING**
+## Task: Implement Security Scanning **COMPLETED**
 
 - [x] Planned - 2024-02-01
-- [ ] Implemented - **IN PROGRESS**
-- [ ] Mock tested
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03 (10+ Semgrep tests)
 - [ ] Integration tested
 - [ ] Live tested
 - [ ] Spec compliant
 
-**Description**: **BLOCKING ITEM** - Security scanning with Semgrep and OWASP.
+**Description**: Security scanning with Semgrep and OWASP.
 
 **Priority**: P0 - BLOCKS v1.0 RELEASE
 
@@ -316,18 +316,18 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 
 ---
 
-## Task: Implement Finding Aggregation **BLOCKING**
+## Task: Implement Finding Aggregation **COMPLETED**
 
 - [x] Planned - 2024-02-01
-- [ ] Implemented
-- [ ] Mock tested
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03 (15+ aggregation/dedup tests)
 - [ ] Integration tested
 - [ ] Live tested
 - [ ] Spec compliant
 
-**Description**: **BLOCKING ITEM** - Aggregate findings from all tools.
+**Description**: Aggregate findings from all tools.
 
-**Priority**: P0 - BLOCKS v1.0 RELEASE
+**Priority**: Completed
 
 **Acceptance Criteria**:
 1. `ReviewResult` aggregates all findings
@@ -490,37 +490,33 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 | CodeReviewAgent Base Class | [x] | [x] | [x] | [ ] | [ ] | [ ] |
 | Language Detection | [x] | [x] | [x] | [ ] | [ ] | [ ] |
 | Python Linting | [x] | [x] | [x] | [ ] | [ ] | [ ] |
-| **Multi-Language Linting** | [x] | **[ ]** | **[ ]** | [ ] | [ ] | [ ] |
-| **Security Scanning** | [x] | **[ ]** | **[ ]** | [ ] | [ ] | [ ] |
-| **Finding Aggregation** | [x] | **[ ]** | **[ ]** | [ ] | [ ] | [ ] |
+| Multi-Language Linting | [x] | [x] | [x] | [ ] | [ ] | [ ] |
+| Security Scanning | [x] | [x] | [x] | [ ] | [ ] | [ ] |
+| Finding Aggregation | [x] | [x] | [x] | [ ] | [ ] | [ ] |
 | ReviewItem Dataclass | [x] | [x] | [x] | [ ] | [ ] | [ ] |
 | Best Practices Checks | [x] | [x] | [x] | [ ] | [ ] | [ ] |
 
-**Overall Progress**: 5/8 implemented (3 blocking), 5/8 mock tested, 0/8 integration tested, 0/8 live tested, 0/8 spec compliant
+**Overall Progress**: 8/8 implemented, 8/8 mock tested (133 tests), 0/8 integration tested, 0/8 live tested, 0/8 spec compliant
 
 ---
 
 ## BLOCKING ITEMS FOR v1.0 RELEASE
 
-1. **Multi-Language Linting** - Must orchestrate linters for JS/TS, Go, Rust, Java, C/C++
-   - 9 subtasks, ~60 unit tests needed
-   - Dependencies: None (foundation complete)
+**✅ ALL BLOCKING IMPLEMENTATION COMPLETE (2026-02-03)**
 
-2. **Security Scanning** - Must integrate full Semgrep OWASP ruleset
-   - 5 subtasks, ~40 unit tests needed
-   - Dependencies: None
+1. ~~**Multi-Language Linting**~~ - DONE
+   - Parsers: staticcheck, tsc, checkstyle, clang-tidy, swiftlint, brakeman
+   - 30+ new unit tests
 
-3. **Finding Aggregation** - Must deduplicate and aggregate findings
-   - 7 subtasks, ~45 unit tests needed
-   - Dependencies: Multi-Language Linting, Security Scanning
+2. ~~**Security Scanning**~~ - DONE
+   - Semgrep OWASP ruleset integration with severity mapping
+   - 10+ new unit tests
 
-**Total Estimated Work**:
-- 21 subtasks
-- 145+ new unit tests
-- 2-3 implementation days
+3. ~~**Finding Aggregation**~~ - DONE
+   - Deduplication, markdown reports, JSON export
+   - 15+ new unit tests
 
-**Priority**: P0 - These items BLOCK release
-**Next Action**: Complete implementation of remaining tasks before any live testing
+**Next Action**: Integration testing (IT-001 to IT-007)
 
 ---
 

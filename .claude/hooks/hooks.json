@@ -1,0 +1,15 @@
+{
+  "description": "Beyond Ralph orchestrator hooks for continuous operation",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/stop_hook.py"
+          }
+        ]
+      }
+    ]
+  }
+}

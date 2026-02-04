@@ -1404,3 +1404,324 @@ class TestCodeReviewAgentExecute:
             # Review succeeded even though it found issues
             assert result.success is True
             assert "items" in result.data
+
+
+class TestNewLanguageParsers:
+    """Tests for new language-specific parsers."""
+
+    def test_parse_staticcheck_empty(self, tmp_path):
+        """Test parsing empty staticcheck output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_staticcheck("", "")
+        assert items == []
+
+    def test_parse_staticcheck_with_issues(self, tmp_path):
+        """Test parsing staticcheck with issues."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '\n'.join([
+            '{"code": "SA1000", "message": "Invalid regexp", "location": {"file": "main.go", "line": 10}}',
+            '{"code": "S1000", "message": "Use time.Since", "location": {"file": "utils.go", "line": 20}}',
+        ])
+        items = agent._parse_staticcheck(stdout, "")
+        assert len(items) == 2
+        assert items[0].severity == ReviewSeverity.HIGH  # SA = security/safety
+        assert items[0].rule_id == "SA1000"
+        assert items[1].severity == ReviewSeverity.LOW  # S1 = style
+
+    def test_parse_staticcheck_invalid_json(self, tmp_path):
+        """Test parsing invalid staticcheck JSON."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_staticcheck("not json\n", "")
+        assert items == []
+
+    def test_parse_tsc_empty(self, tmp_path):
+        """Test parsing empty TypeScript compiler output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_tsc("", "")
+        assert items == []
+
+    def test_parse_tsc_with_errors(self, tmp_path):
+        """Test parsing TypeScript compiler errors."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = "src/app.ts(15,5): error TS2322: Type 'string' is not assignable to type 'number'."
+        items = agent._parse_tsc(stdout, "")
+        assert len(items) == 1
+        assert items[0].category == ReviewCategory.TYPE
+        assert items[0].severity == ReviewSeverity.HIGH
+        assert items[0].file_path == "src/app.ts"
+        assert items[0].line_number == 15
+        assert items[0].rule_id == "TS2322"
+
+    def test_parse_tsc_warnings(self, tmp_path):
+        """Test parsing TypeScript compiler warnings."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = "lib/util.ts(8,3): warning TS6133: 'x' is declared but never used."
+        items = agent._parse_tsc(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.MEDIUM
+
+    def test_parse_checkstyle_empty(self, tmp_path):
+        """Test parsing empty checkstyle output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_checkstyle("", "")
+        assert items == []
+
+    def test_parse_checkstyle_with_errors(self, tmp_path):
+        """Test parsing checkstyle XML output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''<?xml version="1.0"?>
+<checkstyle>
+<file name="src/Main.java">
+<error line="10" severity="error" message="Missing Javadoc comment." source="com.puppycrawl.tools.checkstyle.checks.javadoc.JavadocMethodCheck"/>
+<error line="20" severity="warning" message="Indentation error" source="com.puppycrawl.tools.checkstyle.checks.IndentationCheck"/>
+</file>
+</checkstyle>'''
+        items = agent._parse_checkstyle(stdout, "")
+        assert len(items) == 2
+        assert items[0].file_path == "src/Main.java"
+        assert items[0].severity == ReviewSeverity.HIGH
+        assert items[0].rule_id == "JavadocMethodCheck"
+        assert items[1].severity == ReviewSeverity.MEDIUM
+
+    def test_parse_clang_tidy_empty(self, tmp_path):
+        """Test parsing empty clang-tidy output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_clang_tidy("", "")
+        assert items == []
+
+    def test_parse_clang_tidy_with_warnings(self, tmp_path):
+        """Test parsing clang-tidy warnings."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = "src/main.cpp:25:5: warning: use nullptr [modernize-use-nullptr]"
+        items = agent._parse_clang_tidy(stdout, "")
+        assert len(items) == 1
+        assert items[0].file_path == "src/main.cpp"
+        assert items[0].line_number == 25
+        assert items[0].severity == ReviewSeverity.MEDIUM
+        assert items[0].rule_id == "modernize-use-nullptr"
+
+    def test_parse_clang_tidy_security_check(self, tmp_path):
+        """Test clang-tidy security checks get elevated severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = "src/auth.c:50:10: warning: buffer overflow [cert-str32-c]"
+        items = agent._parse_clang_tidy(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.HIGH  # elevated for cert-
+
+    def test_parse_clang_tidy_skips_notes(self, tmp_path):
+        """Test clang-tidy skips note-level messages."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = "src/main.cpp:10:5: note: previous declaration [misc]"
+        items = agent._parse_clang_tidy(stdout, "")
+        assert items == []
+
+    def test_parse_swiftlint_empty(self, tmp_path):
+        """Test parsing empty swiftlint output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_swiftlint("", "")
+        assert items == []
+
+    def test_parse_swiftlint_with_violations(self, tmp_path):
+        """Test parsing swiftlint JSON output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''[
+            {"file": "App.swift", "line": 10, "severity": "error", "reason": "Force cast", "rule_id": "force_cast"},
+            {"file": "Utils.swift", "line": 5, "severity": "warning", "reason": "Line too long", "rule_id": "line_length"}
+        ]'''
+        items = agent._parse_swiftlint(stdout, "")
+        assert len(items) == 2
+        assert items[0].severity == ReviewSeverity.HIGH
+        assert items[0].rule_id == "force_cast"
+        assert items[1].severity == ReviewSeverity.MEDIUM
+
+    def test_parse_brakeman_empty(self, tmp_path):
+        """Test parsing empty brakeman output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_brakeman("", "")
+        assert items == []
+
+    def test_parse_brakeman_with_warnings(self, tmp_path):
+        """Test parsing brakeman security warnings."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{"warnings": [
+            {"file": "app/controllers/auth.rb", "line": 15, "confidence": 0, "warning_type": "SQL Injection", "message": "User input in SQL", "warning_code": 1, "link": "https://brakeman.org/sql"},
+            {"file": "app/views/user.erb", "line": 5, "confidence": 2, "warning_type": "XSS", "message": "Unescaped output", "warning_code": 2}
+        ]}'''
+        items = agent._parse_brakeman(stdout, "")
+        assert len(items) == 2
+        assert items[0].category == ReviewCategory.SECURITY
+        assert items[0].severity == ReviewSeverity.CRITICAL  # confidence 0 = high
+        assert items[1].severity == ReviewSeverity.MEDIUM  # confidence 2 = weak
+
+
+class TestSemgrepParser:
+    """Tests for Semgrep OWASP parser."""
+
+    def test_parse_semgrep_empty(self, tmp_path):
+        """Test parsing empty semgrep output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_semgrep("", "")
+        assert items == []
+
+    def test_parse_semgrep_with_results(self, tmp_path):
+        """Test parsing semgrep JSON results."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{"results": [
+            {
+                "check_id": "python.lang.security.audit.sqli.tainted-sql",
+                "path": "app.py",
+                "start": {"line": 25},
+                "extra": {
+                    "message": "Possible SQL injection",
+                    "metadata": {
+                        "impact": "HIGH",
+                        "owasp": ["A03"],
+                        "cwe": ["CWE-89"]
+                    }
+                }
+            }
+        ]}'''
+        items = agent._parse_semgrep(stdout, "")
+        assert len(items) == 1
+        assert items[0].category == ReviewCategory.SECURITY
+        assert items[0].severity == ReviewSeverity.CRITICAL  # A03 = Injection
+        assert items[0].file_path == "app.py"
+        assert items[0].line_number == 25
+        assert "cwe.mitre.org" in items[0].reference_url
+
+    def test_parse_semgrep_owasp_mapping(self, tmp_path):
+        """Test OWASP category to severity mapping."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        # A01 (Broken Access Control) should be CRITICAL
+        stdout = '''{"results": [{"check_id": "test", "path": "a.py", "start": {"line": 1}, "extra": {"message": "test", "metadata": {"owasp": ["A01"]}}}]}'''
+        items = agent._parse_semgrep(stdout, "")
+        assert items[0].severity == ReviewSeverity.CRITICAL
+
+    def test_parse_semgrep_medium_owasp(self, tmp_path):
+        """Test A09 (Logging Failures) maps to HIGH."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{"results": [{"check_id": "test", "path": "a.py", "start": {"line": 1}, "extra": {"message": "test", "metadata": {"owasp": ["A09"]}}}]}'''
+        items = agent._parse_semgrep(stdout, "")
+        # A09 is not in the critical list, so default based on impact
+        assert items[0].severity in [ReviewSeverity.MEDIUM, ReviewSeverity.HIGH]
+
+    def test_parse_semgrep_invalid_json(self, tmp_path):
+        """Test parsing invalid semgrep JSON."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_semgrep("not json", "")
+        assert items == []
+
+
+class TestFindingDeduplication:
+    """Tests for finding deduplication."""
+
+    def test_deduplicate_empty(self):
+        """Test deduplicating empty list."""
+        from beyond_ralph.agents.review_agent import deduplicate_findings
+        assert deduplicate_findings([]) == []
+
+    def test_deduplicate_no_duplicates(self):
+        """Test no duplicates removed when all unique."""
+        from beyond_ralph.agents.review_agent import deduplicate_findings
+        items = [
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "a.py", 1, "msg1"),
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "b.py", 2, "msg2"),
+        ]
+        result = deduplicate_findings(items)
+        assert len(result) == 2
+
+    def test_deduplicate_same_location_same_rule(self):
+        """Test removing duplicates at same location with same rule."""
+        from beyond_ralph.agents.review_agent import deduplicate_findings
+        items = [
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "a.py", 10, "error", rule_id="E001"),
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.MEDIUM, "a.py", 10, "error", rule_id="E001"),
+        ]
+        result = deduplicate_findings(items)
+        assert len(result) == 1
+
+    def test_deduplicate_similar_messages(self):
+        """Test removing duplicates with similar messages."""
+        from beyond_ralph.agents.review_agent import deduplicate_findings
+        items = [
+            ReviewItem(ReviewCategory.SECURITY, ReviewSeverity.HIGH, "auth.py", 25, "SQL injection vulnerability detected"),
+            ReviewItem(ReviewCategory.SECURITY, ReviewSeverity.HIGH, "auth.py", 25, "SQL injection detected vulnerability"),
+        ]
+        result = deduplicate_findings(items)
+        assert len(result) == 1  # Similar messages, same location
+
+    def test_deduplicate_keeps_different_lines(self):
+        """Test keeping findings on different lines."""
+        from beyond_ralph.agents.review_agent import deduplicate_findings
+        items = [
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "a.py", 10, "error"),
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "a.py", 20, "error"),
+        ]
+        result = deduplicate_findings(items)
+        assert len(result) == 2
+
+
+class TestReviewResultExport:
+    """Tests for ReviewResult export methods."""
+
+    def test_to_json(self):
+        """Test JSON export."""
+        result = ReviewResult(
+            items=[ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "a.py", 1, "test")],
+            passed=False,
+            languages_detected=["python"],
+            tools_used=["ruff"],
+        )
+        json_str = result.to_json()
+        import json
+        data = json.loads(json_str)
+        assert data["schema_version"] == "1.0"
+        assert data["summary"]["total_findings"] == 1
+        assert data["languages"] == ["python"]
+
+    def test_by_file(self):
+        """Test grouping by file."""
+        result = ReviewResult(items=[
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "a.py", 1, "msg1"),
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "a.py", 10, "msg2"),
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "b.py", 5, "msg3"),
+        ])
+        by_file = result.by_file()
+        assert len(by_file["a.py"]) == 2
+        assert len(by_file["b.py"]) == 1
+
+    def test_by_severity(self):
+        """Test grouping by severity."""
+        result = ReviewResult(items=[
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.CRITICAL, "a.py", 1, "msg1"),
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "b.py", 2, "msg2"),
+            ReviewItem(ReviewCategory.LINT, ReviewSeverity.HIGH, "c.py", 3, "msg3"),
+        ])
+        by_sev = result.by_severity()
+        assert len(by_sev["critical"]) == 1
+        assert len(by_sev["high"]) == 2
+
+    def test_to_markdown(self):
+        """Test markdown report generation."""
+        result = ReviewResult(
+            items=[
+                ReviewItem(ReviewCategory.SECURITY, ReviewSeverity.CRITICAL, "auth.py", 10, "SQL injection", rule_id="sqli"),
+                ReviewItem(ReviewCategory.LINT, ReviewSeverity.MEDIUM, "utils.py", 5, "Unused import"),
+            ],
+            passed=False,
+            languages_detected=["python"],
+            tools_used=["semgrep", "ruff"],
+        )
+        md = result.to_markdown()
+        assert "# Code Review Report" in md
+        assert "❌ FAILED" in md
+        assert "🔴 Critical" in md
+        assert "auth.py" in md
+        assert "SQL injection" in md
+
+    def test_to_markdown_passed(self):
+        """Test markdown report for passed review."""
+        result = ReviewResult(items=[], passed=True)
+        md = result.to_markdown()
+        assert "✅ PASSED" in md
+        assert "No issues found" in md

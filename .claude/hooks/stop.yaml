@@ -1,9 +1,9 @@
 name: beyond-ralph-stop
-description: Save Beyond Ralph orchestrator state when session ends
+description: Keep Beyond Ralph running until project is complete
 event: Stop
 
-# Run Python script to save state
-command: python -c "from beyond_ralph.hooks.stop_handler import handle_stop; handle_stop()"
+# Run Python stop hook that checks state, quota, and blocks if incomplete
+command: python3 .claude/hooks/stop_hook.py
 
-# Don't block session exit
-blocking: false
+# BLOCKING - this is what makes it continue!
+blocking: true
