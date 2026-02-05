@@ -184,8 +184,20 @@ def main():
     # Update iteration counter
     state["hook_iteration"] = iteration
 
-    # If not running/in_progress, allow exit
-    if br_state not in ("running", "in_progress"):
+    # Only allow exit if project is truly complete OR waiting for human input
+    # Terminal states = work is done or blocked on external action
+    # Any other state (running, in_progress, mvp_complete, etc.) should continue
+    # if there are incomplete tasks
+    terminal_states = ("complete", "done", "finished", "stopped", "cancelled", "error")
+    # States that explicitly require human action - NOT "paused" which may be quota-related
+    human_wait_states = ("waiting_for_human", "awaiting_input", "blocked_on_user", "needs_human")
+
+    if br_state in terminal_states:
+        print(f"✅ Beyond Ralph: Project in terminal state ({br_state})", file=sys.stderr)
+        sys.exit(0)
+
+    if br_state in human_wait_states:
+        print(f"⏸️  Beyond Ralph: Waiting for human ({br_state})", file=sys.stderr)
         sys.exit(0)
 
     # Check for completion signals in transcript
