@@ -184,8 +184,8 @@ def main():
     # Update iteration counter
     state["hook_iteration"] = iteration
 
-    # If not running, allow exit
-    if br_state not in ("running",):
+    # If not running/in_progress, allow exit
+    if br_state not in ("running", "in_progress"):
         sys.exit(0)
 
     # Check for completion signals in transcript

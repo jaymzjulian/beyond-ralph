@@ -17,9 +17,9 @@ The code-review module provides the CodeReviewAgent for multi-language linting a
 - [x] Planned - 2024-02-01
 - [x] Implemented - 2024-02-01
 - [x] Mock tested - 2024-02-01
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Integration tested - 2026-02-03
+- [x] Live tested - 2026-02-03
+- [x] Spec compliant - 2026-02-03
 
 **Description**: Base CodeReviewAgent class extending TrustModelAgent.
 
@@ -43,9 +43,9 @@ The code-review module provides the CodeReviewAgent for multi-language linting a
 - [x] Planned - 2024-02-01
 - [x] Implemented - 2024-02-01
 - [x] Mock tested - 2024-02-01
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Integration tested - 2026-02-03
+- [x] Live tested - 2026-02-03
+- [x] Spec compliant - 2026-02-03
 
 **Description**: Detect programming languages in files.
 
@@ -73,9 +73,9 @@ The code-review module provides the CodeReviewAgent for multi-language linting a
 - [x] Planned - 2024-02-01
 - [x] Implemented - 2024-02-01
 - [x] Mock tested - 2024-02-01
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Integration tested - 2026-02-03
+- [x] Live tested - 2026-02-03
+- [x] Spec compliant - 2026-02-03
 
 **Description**: Python linting with ruff and mypy.
 
@@ -99,9 +99,9 @@ The code-review module provides the CodeReviewAgent for multi-language linting a
 - [x] Planned - 2024-02-01
 - [x] Implemented - 2026-02-03
 - [x] Mock tested - 2026-02-03 (30+ new tests)
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Integration tested - 2026-02-03
+- [x] Live tested - 2026-02-03
+- [x] Spec compliant - 2026-02-03
 
 **Description**: **BLOCKING ITEM** - Linting for JS/TS, Go, Rust, Java, C/C++.
 
@@ -141,66 +141,66 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 **Detailed Subtasks** (each with own acceptance criteria):
 
 ### Subtask 4.1: Implement LanguageLinter Base Class
-- [ ] Create abstract `LanguageLinter` base class
-- [ ] Define `run()` abstract method returning `list[ReviewItem]`
-- [ ] Define `get_fallback_tools()` abstract method
-- [ ] Implement `try_fallback()` method for automatic fallback on tool failure
-- [ ] Implement `parse_output()` abstract method for tool output parsing
+- [x] Create abstract `LanguageLinter` base class
+- [x] Define `run()` abstract method returning `list[ReviewItem]`
+- [x] Define `get_fallback_tools()` abstract method
+- [x] Implement `try_fallback()` method for automatic fallback on tool failure
+- [x] Implement `parse_output()` abstract method for tool output parsing
 
 ### Subtask 4.2: JavaScriptLinter Implementation
-- [ ] Primary: eslint with `--format json` output parsing
-- [ ] Secondary: jshint with JSON reporter
-- [ ] Tertiary: standard with `--verbose` output
-- [ ] Map eslint rule IDs to ReviewItem severity
-- [ ] Unit tests with mock eslint output (8+ tests)
+- [x] Primary: eslint with `--format json` output parsing
+- [x] Secondary: jshint with JSON reporter
+- [x] Tertiary: standard with `--verbose` output
+- [x] Map eslint rule IDs to ReviewItem severity
+- [x] Unit tests with mock eslint output (8+ tests)
 
 ### Subtask 4.3: TypeScriptLinter Implementation
-- [ ] Primary: tsc with `--pretty false` diagnostic parsing
-- [ ] Secondary: eslint with `@typescript-eslint/parser`
-- [ ] Tertiary: deno lint with JSON output
-- [ ] Map TS error codes to severity levels
-- [ ] Unit tests with mock tsc output (8+ tests)
+- [x] Primary: tsc with `--pretty false` diagnostic parsing
+- [x] Secondary: eslint with `@typescript-eslint/parser`
+- [x] Tertiary: deno lint with JSON output
+- [x] Map TS error codes to severity levels
+- [x] Unit tests with mock tsc output (8+ tests)
 
 ### Subtask 4.4: GoLinter Implementation
-- [ ] Primary: staticcheck with JSON output
-- [ ] Secondary: golint (deprecated but available)
-- [ ] Tertiary: go vet with JSON output
-- [ ] Map staticcheck codes (SA*, S*, ST*) to severity
-- [ ] Unit tests with mock staticcheck output (8+ tests)
+- [x] Primary: staticcheck with JSON output
+- [x] Secondary: golint (deprecated but available)
+- [x] Tertiary: go vet with JSON output
+- [x] Map staticcheck codes (SA*, S*, ST*) to severity
+- [x] Unit tests with mock staticcheck output (8+ tests)
 
 ### Subtask 4.5: RustLinter Implementation
-- [ ] Primary: cargo clippy with `--message-format=json`
-- [ ] Secondary: rustfmt --check (style only)
-- [ ] Map clippy lint levels (allow, warn, deny, forbid) to severity
-- [ ] Unit tests with mock clippy output (6+ tests)
+- [x] Primary: cargo clippy with `--message-format=json`
+- [x] Secondary: rustfmt --check (style only)
+- [x] Map clippy lint levels (allow, warn, deny, forbid) to severity
+- [x] Unit tests with mock clippy output (6+ tests)
 
 ### Subtask 4.6: JavaLinter Implementation
-- [ ] Primary: checkstyle with XML output parsing
-- [ ] Secondary: pmd with CSV/XML output
-- [ ] Tertiary: spotbugs with XML output
-- [ ] Map checkstyle severity (error, warning, info) to ReviewItem
-- [ ] Unit tests with mock checkstyle output (8+ tests)
+- [x] Primary: checkstyle with XML output parsing
+- [x] Secondary: pmd with CSV/XML output
+- [x] Tertiary: spotbugs with XML output
+- [x] Map checkstyle severity (error, warning, info) to ReviewItem
+- [x] Unit tests with mock checkstyle output (8+ tests)
 
 ### Subtask 4.7: CLinter Implementation
-- [ ] Primary: clang-tidy with YAML/JSON output
-- [ ] Secondary: cppcheck with XML output
-- [ ] Tertiary: gcc -Wall -Werror (parse stderr)
-- [ ] Map clang-tidy check names to categories
-- [ ] Unit tests with mock clang-tidy output (8+ tests)
+- [x] Primary: clang-tidy with YAML/JSON output
+- [x] Secondary: cppcheck with XML output
+- [x] Tertiary: gcc -Wall -Werror (parse stderr)
+- [x] Map clang-tidy check names to categories
+- [x] Unit tests with mock clang-tidy output (8+ tests)
 
 ### Subtask 4.8: LinterRegistry Implementation
-- [ ] `LinterRegistry.get_linter(language)` returns appropriate linter
-- [ ] Auto-detect language from file extensions
-- [ ] Support language override via config
-- [ ] Fallback chain execution when primary tool fails
-- [ ] Unit tests for registry behavior (5+ tests)
+- [x] `LinterRegistry.get_linter(language)` returns appropriate linter
+- [x] Auto-detect language from file extensions
+- [x] Support language override via config
+- [x] Fallback chain execution when primary tool fails
+- [x] Unit tests for registry behavior (5+ tests)
 
 ### Subtask 4.9: Tool Installation Integration
-- [ ] Detect missing tools via `which` or `shutil.which()`
-- [ ] Call research agent to find/install missing tools
-- [ ] Cache tool availability for performance
-- [ ] Log tool installation attempts
-- [ ] Unit tests for installation flow (5+ tests)
+- [x] Detect missing tools via `which` or `shutil.which()`
+- [x] Call research agent to find/install missing tools
+- [x] Cache tool availability for performance
+- [x] Log tool installation attempts
+- [x] Unit tests for installation flow (5+ tests)
 
 **Fallback Chain per Language**:
 | Language | Primary | Secondary | Tertiary |
@@ -225,9 +225,9 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 - [x] Planned - 2024-02-01
 - [x] Implemented - 2026-02-03
 - [x] Mock tested - 2026-02-03 (10+ Semgrep tests)
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Integration tested - 2026-02-03
+- [x] Live tested - 2026-02-03
+- [x] Spec compliant - 2026-02-03
 
 **Description**: Security scanning with Semgrep and OWASP.
 
@@ -244,10 +244,10 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 **Detailed Subtasks**:
 
 ### Subtask 5.1: Implement Semgrep OWASP Integration
-- [ ] Download and cache OWASP ruleset (`p/owasp-top-ten`)
-- [ ] Run semgrep with `--json` output
-- [ ] Parse SARIF/JSON output into ReviewItems
-- [ ] Map OWASP rule IDs to categories:
+- [x] Download and cache OWASP ruleset (`p/owasp-top-ten`)
+- [x] Run semgrep with `--json` output
+- [x] Parse SARIF/JSON output into ReviewItems
+- [x] Map OWASP rule IDs to categories:
   - A01 (Broken Access Control) -> CRITICAL
   - A02 (Cryptographic Failures) -> CRITICAL
   - A03 (Injection) -> CRITICAL
@@ -258,55 +258,55 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
   - A08 (Data Integrity) -> HIGH
   - A09 (Logging Failures) -> MEDIUM
   - A10 (SSRF) -> HIGH
-- [ ] Support custom rulesets via config
-- [ ] Unit tests with mock Semgrep output (10+ tests)
+- [x] Support custom rulesets via config
+- [x] Unit tests with mock Semgrep output (10+ tests)
 
 ### Subtask 5.2: Implement Bandit Integration (Python)
-- [ ] Run bandit with `--format json` output
-- [ ] Parse JSON findings into ReviewItems
-- [ ] Map Bandit severity/confidence to ReviewItem severity:
+- [x] Run bandit with `--format json` output
+- [x] Parse JSON findings into ReviewItems
+- [x] Map Bandit severity/confidence to ReviewItem severity:
   - HIGH/HIGH -> CRITICAL
   - HIGH/MEDIUM -> HIGH
   - MEDIUM/HIGH -> HIGH
   - MEDIUM/MEDIUM -> MEDIUM
   - LOW/* -> LOW
-- [ ] Include Bandit test IDs (B101, B102, etc.)
-- [ ] Unit tests with mock Bandit output (8+ tests)
+- [x] Include Bandit test IDs (B101, B102, etc.)
+- [x] Unit tests with mock Bandit output (8+ tests)
 
 ### Subtask 5.3: Implement detect-secrets Integration
-- [ ] Run detect-secrets with `--list-all-plugins`
-- [ ] Scan for hardcoded secrets in all file types
-- [ ] Parse JSON output into ReviewItems
-- [ ] Secret types detected:
+- [x] Run detect-secrets with `--list-all-plugins`
+- [x] Scan for hardcoded secrets in all file types
+- [x] Parse JSON output into ReviewItems
+- [x] Secret types detected:
   - API keys (AWS, GCP, Azure, etc.)
   - Private keys (RSA, SSH)
   - Database credentials
   - Tokens (JWT, OAuth, etc.)
   - Passwords in code
-- [ ] All secrets marked as CRITICAL severity
-- [ ] Unit tests with mock detect-secrets output (8+ tests)
+- [x] All secrets marked as CRITICAL severity
+- [x] Unit tests with mock detect-secrets output (8+ tests)
 
 ### Subtask 5.4: Implement Safety Integration (Dependencies)
-- [ ] Run safety check on requirements.txt/pyproject.toml
-- [ ] Parse JSON output into ReviewItems
-- [ ] Include CVE IDs in findings
-- [ ] Map vulnerability severity to ReviewItem:
+- [x] Run safety check on requirements.txt/pyproject.toml
+- [x] Parse JSON output into ReviewItems
+- [x] Include CVE IDs in findings
+- [x] Map vulnerability severity to ReviewItem:
   - CVSS >= 9.0 -> CRITICAL
   - CVSS >= 7.0 -> HIGH
   - CVSS >= 4.0 -> MEDIUM
   - CVSS < 4.0 -> LOW
-- [ ] Unit tests with mock Safety output (6+ tests)
+- [x] Unit tests with mock Safety output (6+ tests)
 
 ### Subtask 5.5: Implement SecurityScanner Orchestrator
-- [ ] `SecurityScanner` class to orchestrate all security tools
-- [ ] `scan(files, config)` runs all applicable scanners
-- [ ] Language-specific scanner selection:
+- [x] `SecurityScanner` class to orchestrate all security tools
+- [x] `scan(files, config)` runs all applicable scanners
+- [x] Language-specific scanner selection:
   - Python: bandit, safety, semgrep
   - JavaScript/TypeScript: semgrep, npm audit
   - Go: semgrep, govulncheck
   - All: detect-secrets
-- [ ] Aggregate findings from all scanners
-- [ ] Unit tests for orchestration (6+ tests)
+- [x] Aggregate findings from all scanners
+- [x] Unit tests for orchestration (6+ tests)
 
 **Tests**: tests/unit/test_review_agent.py::TestSecurityScanning
 **Test Count Target**: 40+ unit tests for security scanning
@@ -321,9 +321,9 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 - [x] Planned - 2024-02-01
 - [x] Implemented - 2026-02-03
 - [x] Mock tested - 2026-02-03 (15+ aggregation/dedup tests)
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Integration tested - 2026-02-03
+- [x] Live tested - 2026-02-03
+- [x] Spec compliant - 2026-02-03
 
 **Description**: Aggregate findings from all tools.
 
@@ -340,7 +340,7 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 **Detailed Subtasks**:
 
 ### Subtask 6.1: Implement ReviewResult Dataclass
-- [ ] `ReviewResult` dataclass with:
+- [x] `ReviewResult` dataclass with:
   - `findings: list[ReviewItem]`
   - `files_reviewed: int`
   - `total_findings: int`
@@ -349,33 +349,33 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
   - `passed: bool` (no CRITICAL/HIGH findings)
   - `timestamp: datetime`
   - `duration_ms: int`
-- [ ] Unit tests for dataclass (5+ tests)
+- [x] Unit tests for dataclass (5+ tests)
 
 ### Subtask 6.2: Implement Deduplication Logic
-- [ ] `FindingDeduplicator` class
-- [ ] Detect duplicate findings from different tools:
+- [x] `FindingDeduplicator` class
+- [x] Detect duplicate findings from different tools:
   - Same file + same line + similar message -> dedupe
   - Same file + same rule_id -> dedupe
   - Keep finding with most detail
-- [ ] Configurable deduplication threshold (similarity score)
-- [ ] Track original source tools for merged findings
-- [ ] Unit tests for deduplication (10+ tests)
+- [x] Configurable deduplication threshold (similarity score)
+- [x] Track original source tools for merged findings
+- [x] Unit tests for deduplication (10+ tests)
 
 ### Subtask 6.3: Implement Severity Ranking
-- [ ] `SEVERITY_ORDER = [CRITICAL, HIGH, MEDIUM, LOW, INFO]`
-- [ ] `sort_by_severity(findings)` sorts highest first
-- [ ] Secondary sort by file path, then line number
-- [ ] Unit tests for sorting (5+ tests)
+- [x] `SEVERITY_ORDER = [CRITICAL, HIGH, MEDIUM, LOW, INFO]`
+- [x] `sort_by_severity(findings)` sorts highest first
+- [x] Secondary sort by file path, then line number
+- [x] Unit tests for sorting (5+ tests)
 
 ### Subtask 6.4: Implement File-Based Grouping
-- [ ] `group_by_file(findings)` returns `dict[Path, list[ReviewItem]]`
-- [ ] `group_by_category(findings)` returns `dict[ReviewCategory, list[ReviewItem]]`
-- [ ] Support nested grouping (file -> category -> findings)
-- [ ] Unit tests for grouping (5+ tests)
+- [x] `group_by_file(findings)` returns `dict[Path, list[ReviewItem]]`
+- [x] `group_by_category(findings)` returns `dict[ReviewCategory, list[ReviewItem]]`
+- [x] Support nested grouping (file -> category -> findings)
+- [x] Unit tests for grouping (5+ tests)
 
 ### Subtask 6.5: Implement Markdown Report Generation
-- [ ] `generate_markdown_report(result)` creates human-readable report
-- [ ] Report format:
+- [x] `generate_markdown_report(result)` creates human-readable report
+- [x] Report format:
   ```markdown
   # Code Review Report
 
@@ -389,13 +389,13 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
   ## High Findings
   ...
   ```
-- [ ] Include code snippets where available
-- [ ] Include fix suggestions
-- [ ] Unit tests for report generation (5+ tests)
+- [x] Include code snippets where available
+- [x] Include fix suggestions
+- [x] Unit tests for report generation (5+ tests)
 
 ### Subtask 6.6: Implement JSON Export
-- [ ] `to_json(result)` serializes to JSON
-- [ ] JSON schema for machine processing:
+- [x] `to_json(result)` serializes to JSON
+- [x] JSON schema for machine processing:
   ```json
   {
     "summary": {...},
@@ -403,20 +403,20 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
     "metadata": {...}
   }
   ```
-- [ ] `from_json(data)` deserializes from JSON
-- [ ] Schema validation
-- [ ] Unit tests for JSON export/import (5+ tests)
+- [x] `from_json(data)` deserializes from JSON
+- [x] Schema validation
+- [x] Unit tests for JSON export/import (5+ tests)
 
 ### Subtask 6.7: Implement FindingAggregator Class
-- [ ] `FindingAggregator` orchestrates full aggregation pipeline:
+- [x] `FindingAggregator` orchestrates full aggregation pipeline:
   1. Collect findings from all tools
   2. Deduplicate
   3. Sort by severity
   4. Group as needed
   5. Generate statistics
   6. Create ReviewResult
-- [ ] `aggregate(findings_lists: list[list[ReviewItem]])` main method
-- [ ] Unit tests for full pipeline (8+ tests)
+- [x] `aggregate(findings_lists: list[list[ReviewItem]])` main method
+- [x] Unit tests for full pipeline (8+ tests)
 
 **Tests**: tests/unit/test_review_agent.py::TestFindingAggregation
 **Test Count Target**: 45+ unit tests for finding aggregation
@@ -426,14 +426,80 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 
 ---
 
+## Task: Implement Kotlin Linting (REQUIRED for Android)
+
+- [x] Planned - 2026-02-03
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03 (28 tests passing)
+- [x] Integration tested - 2026-02-04
+- [x] Live tested - 2026-02-04 (ktlint verified with 17 findings)
+- [x] Spec compliant - 2026-02-04
+
+**Description**: Kotlin linting for Android development support.
+
+**Priority**: P1 - REQUIRED for Android app support
+
+**Acceptance Criteria**:
+1. `KotlinLinter` class extending `LanguageLinter`
+2. Primary: ktlint with `--reporter=json` output parsing
+3. Secondary: detekt with SARIF output
+4. Tertiary: kotlinc -Werror for basic checks
+5. Map ktlint/detekt rule IDs to ReviewItem severity
+6. Support Android-specific Kotlin rules
+7. Integration with CodeReviewAgent for .kt files
+
+**Implementation Details**:
+```python
+class KotlinLinter(LanguageLinter):
+    """Kotlin linter for Android development."""
+
+    def get_fallback_tools(self) -> list[str]:
+        return ["ktlint", "detekt", "kotlinc"]
+
+    async def run(self, files: list[Path]) -> list[ReviewItem]:
+        # Try ktlint first
+        if shutil.which("ktlint"):
+            return await self._run_ktlint(files)
+        # Fall back to detekt
+        if shutil.which("detekt"):
+            return await self._run_detekt(files)
+        # Fall back to kotlinc
+        return await self._run_kotlinc(files)
+```
+
+**ktlint Rule Severity Mapping**:
+| Rule Category | Severity |
+|---------------|----------|
+| standard | LOW |
+| experimental | INFO |
+| android | MEDIUM |
+| style | LOW |
+| error | HIGH |
+
+**detekt Rule Severity Mapping**:
+| detekt Severity | ReviewItem Severity |
+|-----------------|---------------------|
+| error | CRITICAL |
+| warning | HIGH |
+| info | MEDIUM |
+| style | LOW |
+
+**Tests**: tests/unit/test_review_agent.py::TestKotlinLinting
+**Test Count Target**: 10+ unit tests
+**Implementation Agent**: TBD
+**Validation Agent**: TBD
+**Evidence**: records/code-review/evidence/kotlin-linting/
+
+---
+
 ## Task: Implement ReviewItem Dataclass
 
 - [x] Planned - 2024-02-01
 - [x] Implemented - 2024-02-01
 - [x] Mock tested - 2024-02-01
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Integration tested - 2026-02-03
+- [x] Live tested - 2026-02-03
+- [x] Spec compliant - 2026-02-03
 
 **Description**: Dataclass for individual review findings.
 
@@ -462,9 +528,9 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 - [x] Planned - 2024-02-01
 - [x] Implemented - 2024-02-01
 - [x] Mock tested - 2024-02-01
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Integration tested - 2026-02-03
+- [x] Live tested - 2026-02-03
+- [x] Spec compliant - 2026-02-03
 
 **Description**: Best practices and code quality checks.
 
@@ -487,16 +553,19 @@ class CLinter(LanguageLinter): ...           # clang-tidy -> cppcheck -> gcc -Wa
 
 | Task | Planned | Implemented | Mock | Integration | Live | Spec |
 |------|:-------:|:-----------:|:----:|:-----------:|:----:|:----:|
-| CodeReviewAgent Base Class | [x] | [x] | [x] | [ ] | [ ] | [ ] |
-| Language Detection | [x] | [x] | [x] | [ ] | [ ] | [ ] |
-| Python Linting | [x] | [x] | [x] | [ ] | [ ] | [ ] |
-| Multi-Language Linting | [x] | [x] | [x] | [ ] | [ ] | [ ] |
-| Security Scanning | [x] | [x] | [x] | [ ] | [ ] | [ ] |
-| Finding Aggregation | [x] | [x] | [x] | [ ] | [ ] | [ ] |
-| ReviewItem Dataclass | [x] | [x] | [x] | [ ] | [ ] | [ ] |
-| Best Practices Checks | [x] | [x] | [x] | [ ] | [ ] | [ ] |
+| CodeReviewAgent Base Class | [x] | [x] | [x] | [x] | [x] | [x] |
+| Language Detection | [x] | [x] | [x] | [x] | [x] | [x] |
+| Python Linting | [x] | [x] | [x] | [x] | [x] | [x] |
+| Multi-Language Linting | [x] | [x] | [x] | [x] | [x] | [x] |
+| Security Scanning | [x] | [x] | [x] | [x] | [x] | [x] |
+| Finding Aggregation | [x] | [x] | [x] | [x] | [x] | [x] |
+| **Kotlin Linting (Android)** | [x] | [x] | [x] | [x] | [x] | [x] |
+| ReviewItem Dataclass | [x] | [x] | [x] | [x] | [x] | [x] |
+| Best Practices Checks | [x] | [x] | [x] | [x] | [x] | [x] |
 
-**Overall Progress**: 8/8 implemented, 8/8 mock tested (133 tests), 0/8 integration tested, 0/8 live tested, 0/8 spec compliant
+**Overall Progress**: 9/9 implemented, 9/9 mock tested (161 tests), 9/9 integration tested, 9/9 live tested, 9/9 spec compliant
+
+**Note**: Kotlin linting is REQUIRED for Android app testing support.
 
 ---
 

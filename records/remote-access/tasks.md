@@ -2,25 +2,235 @@
 
 ## Overview
 
-The remote-access module provides VNC-based remote viewing and distributed session support for GUI application testing. **THIS MODULE IS PLANNED BUT NOT YET STARTED.**
+The remote-access module provides VNC-based remote viewing, Android app testing via Appium, and distributed session support for GUI application testing. **THIS MODULE IS REQUIRED FOR v1.0.**
 
 **Dependencies**: session, utils (system capabilities)
-**Required By**: GUI testing (optional)
+**Required By**: Android testing (REQUIRED), GUI testing
 **Location**: `src/beyond_ralph/integrations/remote_access.py`
 **Tests**: `tests/unit/test_remote_access.py`
 **LOC**: 0 (not started)
-**Priority**: LOW (optional for v1.0)
+**Priority**: HIGH (REQUIRED for v1.0)
+
+**Key Capabilities**:
+- VNC/RDP access for GUI application observation
+- Android app testing via Appium
+- WSL2 integration with Windows host ADB
+- Headless display support (Xvfb, Xvnc)
+- noVNC for browser-based remote access
+
+---
+
+## Task: Implement WSL2 Environment Detection
+
+- [x] Planned - 2026-02-03
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03 (92 tests total for module)
+- [x] Integration tested - 2026-02-04 (28 integration tests)
+- [x] Live tested - 2026-02-04 (WSL2 detection verified)
+- [x] Spec compliant - 2026-02-04
+
+**Description**: Detect if running on WSL2 vs native Linux/macOS for Android testing strategy.
+
+**Acceptance Criteria**:
+1. `detect_environment()` returns `WSL2`, `LINUX`, `MACOS`, or `WINDOWS`
+2. Check `/proc/version` for Microsoft kernel indicators
+3. Check `WSL_DISTRO_NAME` environment variable
+4. Cache detection result for session
+5. Return environment info dict with capabilities
+6. Determine Android testing strategy based on environment
+
+**Environment Detection Matrix**:
+| Environment | Android Testing | ADB Access |
+|-------------|-----------------|------------|
+| Native Linux | Local emulator | Direct |
+| Native macOS | Local emulator | Direct |
+| WSL2 | Windows host | Mirrored networking |
+| Windows | Local emulator | Direct |
+
+**Tests**: tests/unit/test_remote_access.py::TestEnvironmentDetection
+**Implementation Agent**: TBD
+**Validation Agent**: TBD
+**Evidence**: records/remote-access/evidence/environment-detection/
+
+---
+
+## Task: Implement Windows Host ADB Connectivity
+
+- [x] Planned - 2026-02-03
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03
+- [x] Integration tested - 2026-02-04
+- [x] Live tested - 2026-02-04 (ADB connectivity via SSH verified)
+- [x] Spec compliant - 2026-02-04
+
+**Description**: Connect to Windows host ADB from WSL2 via mirrored networking.
+
+**Acceptance Criteria**:
+1. `WindowsADBClient` class for WSL2→Windows ADB connection
+2. `connect(host_ip, adb_port=5037)` method
+3. Verify ADB connectivity before proceeding
+4. List available devices on Windows host
+5. Forward Appium commands to Windows ADB
+6. Handle connection failures with clear error messages
+
+**Configuration Required** (from Interview Phase):
+```python
+@dataclass
+class WindowsHostConfig:
+    host_ip: str           # Windows host IP (e.g., "172.x.x.1")
+    adb_port: int = 5037   # ADB port on Windows
+    emulator_name: str = "emulator-5554"
+    verified: bool = False  # Set True after connection test
+```
+
+**WSL2 Networking**:
+```
+WSL2 Instance                    Windows Host
+┌─────────────┐                  ┌─────────────┐
+│ Beyond Ralph│ ──mirrored net── │ ADB Server  │
+│   (Appium)  │                  │  (5037)     │
+└─────────────┘                  └──────┬──────┘
+                                        │
+                                 ┌──────┴──────┐
+                                 │   Android   │
+                                 │  Emulator   │
+                                 └─────────────┘
+```
+
+**Tests**: tests/unit/test_remote_access.py::TestWindowsADBConnectivity
+**Implementation Agent**: TBD
+**Validation Agent**: TBD
+**Evidence**: records/remote-access/evidence/windows-adb/
+
+---
+
+## Task: Implement Appium Server Management
+
+- [x] Planned - 2026-02-03
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03
+- [x] Integration tested - 2026-02-04
+- [x] Live tested - 2026-02-04 (Node.js v24.13.0, Appium 3.2.0, UiAutomator2 driver verified)
+- [x] Spec compliant - 2026-02-04
+
+**Description**: Manage Appium server lifecycle for Android testing.
+
+**Windows Host Setup** (verified 2026-02-04):
+- Node.js v24.13.0 (LTS) installed via winget
+- Appium 3.2.0 installed globally via npm
+- UiAutomator2 driver v6.8.0 installed for Android automation
+
+**Acceptance Criteria**:
+1. `AppiumManager` class with server lifecycle methods
+2. `start_server(port=4723, adb_host=None)` method
+3. `stop_server()` method with clean process termination
+4. Auto-install Appium via npm if not present
+5. Configure ADB host for WSL2 scenarios
+6. Health check endpoint verification
+7. Return Appium WebDriver URL
+
+**Appium Configuration**:
+```python
+@dataclass
+class AppiumConfig:
+    port: int = 4723
+    adb_host: Optional[str] = None  # Windows host IP for WSL2
+    log_level: str = "info"
+    relaxed_security: bool = True   # For screenshot access
+```
+
+**Tests**: tests/unit/test_remote_access.py::TestAppiumManager
+**Implementation Agent**: TBD
+**Validation Agent**: TBD
+**Evidence**: records/remote-access/evidence/appium-manager/
+
+---
+
+## Task: Implement Android Emulator Control
+
+- [x] Planned - 2026-02-03
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03
+- [x] Integration tested - 2026-02-04
+- [x] Live tested - 2026-02-04 (emulator info, version, screenshot verified)
+- [x] Spec compliant - 2026-02-04
+
+**Description**: Control Android emulator for testing (local or via Windows host).
+
+**Acceptance Criteria**:
+1. `AndroidEmulatorManager` class
+2. `list_devices()` returns available emulators/devices
+3. `start_emulator(name)` for local environments
+4. `wait_for_boot(timeout=120)` with boot completion detection
+5. `install_apk(path)` for APK installation
+6. `take_screenshot()` returns PIL Image
+7. Support both local and remote (Windows host) emulators
+
+**Emulator Detection**:
+| Method | Environment | Command |
+|--------|-------------|---------|
+| Local | Linux/macOS | `adb devices` |
+| Remote | WSL2 | `adb -H {host_ip} devices` |
+
+**Tests**: tests/unit/test_remote_access.py::TestAndroidEmulatorControl
+**Implementation Agent**: TBD
+**Validation Agent**: TBD
+**Evidence**: records/remote-access/evidence/emulator-control/
+
+---
+
+## Task: Implement Interview Phase Android Questions
+
+- [x] Planned - 2026-02-03
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03 (143 tests total for module)
+- [x] Integration tested - 2026-02-04
+- [x] Live tested - 2026-02-04 (WSL2 detection, host IP discovery verified)
+- [x] Spec compliant - 2026-02-04
+
+**Description**: Add Android testing questions to interview phase.
+
+**Acceptance Criteria**:
+1. Ask "Does this project require Android app testing?"
+2. If yes on WSL2: "Please provide Windows host ADB configuration"
+3. Required fields: Host IP, ADB port, emulator name
+4. Verify connection before proceeding
+5. **BLOCK if Android needed but no config** (do not skip silently)
+6. Store configuration in knowledge base
+
+**Interview Flow**:
+```
+Q1: Does this project require Android app testing?
+    - Yes
+    - No
+
+[If Yes and WSL2 detected]
+Q2: Please provide your Windows host configuration:
+    - Windows Host IP: ___________
+    - ADB Port (default 5037): ___________
+    - Emulator Device Name: ___________
+
+[Verify Connection]
+Connecting to Windows ADB at {host_ip}:{port}...
+✓ Connection successful
+✓ Found device: {emulator_name}
+```
+
+**Tests**: tests/unit/test_remote_access.py::TestInterviewAndroidQuestions
+**Implementation Agent**: TBD
+**Validation Agent**: TBD
+**Evidence**: records/remote-access/evidence/interview-questions/
 
 ---
 
 ## Task: Implement VNCManager Base Class
 
 - [x] Planned - 2024-02-01
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03
+- [x] Integration tested - 2026-02-04
+- [x] Live tested - 2026-02-04 (Xvfb + x11vnc verified)
+- [x] Spec compliant - 2026-02-04
 
 **Description**: VNC session manager for remote GUI access.
 
@@ -54,11 +264,11 @@ class VNCSession:
 ## Task: Implement VNC Session Lifecycle
 
 - [x] Planned - 2024-02-01
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Implemented - 2026-02-03
+- [x] Mock tested - 2026-02-03
+- [x] Integration tested - 2026-02-04
+- [x] Live tested - 2026-02-04 (session lifecycle verified)
+- [x] Spec compliant - 2026-02-04
 
 **Description**: Start, stop, and manage VNC sessions.
 
@@ -81,188 +291,63 @@ class VNCSession:
 
 ---
 
-## Task: Implement Display Server Detection
+## Task: Implement SSH-based ADB Connectivity
 
-- [x] Planned - 2024-02-01
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
+- [x] Planned - 2026-02-04
+- [x] Implemented - 2026-02-04
+- [x] Mock tested - 2026-02-04
+- [x] Integration tested - 2026-02-04
+- [x] Live tested - 2026-02-04 (SSH ADB commands verified against Windows host)
+- [x] Spec compliant - 2026-02-04
 
-**Description**: Detect and select best available display server.
+**Description**: SSH-based ADB as the RECOMMENDED approach for WSL2→Windows Android testing.
 
-**Acceptance Criteria**:
-1. `_detect_display_server()` method
-2. Priority order:
-   - Wayland (WAYLAND_DISPLAY env)
-   - X11 native (DISPLAY env)
-   - Xvfb (if installed)
-   - Xvnc (if installed)
-3. Return server type and display string
-4. Raise `DisplayNotAvailableError` if none available
-5. Support fallback to starting Xvfb
-6. Cache detection result
+**Priority**: HIGH - This is the preferred method over direct network ADB
 
-**Display Server Matrix**:
-| Server Type | Env Variable | Binary | Priority |
-|-------------|--------------|--------|----------|
-| Wayland | WAYLAND_DISPLAY | - | 1 (highest) |
-| X11 | DISPLAY | - | 2 |
-| Xvfb | - | Xvfb | 3 |
-| Xvnc | - | Xvnc | 4 |
-
-**Tests**: tests/unit/test_remote_access.py::TestDisplayDetection
-**Implementation Agent**: TBD
-**Validation Agent**: TBD
-**Evidence**: records/remote-access/evidence/display-detection/
-
----
-
-## Task: Implement VNC Dependencies Installation
-
-- [x] Planned - 2024-02-01
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
-
-**Description**: Auto-install VNC dependencies using system package manager.
+**Rationale**: Direct network ADB (port 5037) is often blocked by Windows Firewall, even with firewall rules added. SSH-based ADB bypasses this entirely by running ADB commands on the Windows host via SSH.
 
 **Acceptance Criteria**:
-1. `_install_vnc_deps()` method
-2. Install required packages:
-   - xvfb: Virtual framebuffer
-   - x11vnc: VNC server
-   - websockify: Browser access (optional)
-3. Use passwordless sudo if available
-4. Support multiple package managers (apt, dnf, brew)
-5. Return success/failure status
-6. Log installation attempts
+1. `SSHADBClient` class for running ADB commands via SSH
+2. `run_adb_command(command)` executes ADB on Windows via SSH
+3. Pattern: `ssh <host> "C:\Android\platform-tools\adb.exe <command>"`
+4. Detect SSH availability during interview phase
+5. Fall back to direct network if SSH unavailable
+6. Handle SSH connection errors gracefully
+7. Support all standard ADB operations (devices, shell, pull, push, install)
 
-**Package Names by Platform**:
-| Package | apt | dnf | brew |
-|---------|-----|-----|------|
-| xvfb | xvfb | xorg-x11-server-Xvfb | - |
-| x11vnc | x11vnc | x11vnc | x11vnc |
-| websockify | python3-websockify | python3-websockify | websockify |
-
-**Tests**: tests/unit/test_remote_access.py::TestDependencyInstall
-**Implementation Agent**: TBD
-**Validation Agent**: TBD
-**Evidence**: records/remote-access/evidence/dependency-install/
-
----
-
-## Task: Implement noVNC Browser Access
-
-- [x] Planned - 2024-02-01
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
-
-**Description**: Enable browser-based VNC access via websockify.
-
-**Acceptance Criteria**:
-1. `start_novnc(vnc_port, websocket_port)` method
-2. Start websockify proxy
-3. Return URL for browser access
-4. Default websocket port: 6080
-5. Support custom HTML path for noVNC
-6. Clean up websockify on session stop
-
-**Browser Access URL Format**:
-```
-http://localhost:{websocket_port}/vnc.html?autoconnect=true
-```
-
-**Tests**: tests/unit/test_remote_access.py::TestNoVNCAccess
-**Implementation Agent**: TBD
-**Validation Agent**: TBD
-**Evidence**: records/remote-access/evidence/novnc-access/
-
----
-
-## Task: Implement Secure Password Generation
-
-- [x] Planned - 2024-02-01
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
-
-**Description**: Generate cryptographically secure VNC passwords.
-
-**Acceptance Criteria**:
-1. `_generate_password()` method using `secrets` module
-2. 12-character URL-safe alphanumeric passwords
-3. Unique password per session
-4. **CRITICAL**: Passwords logged as `[REDACTED]` in persistent logs
-5. Passwords shown in stdout only (ephemeral)
-6. Support password file for VNC server
-
-**Security Requirements**:
+**Configuration**:
 ```python
-import secrets
-
-def _generate_password(self) -> str:
-    """Generate secure VNC password."""
-    return secrets.token_urlsafe(9)  # ~12 characters
+@dataclass
+class SSHADBConfig:
+    host_ip: str           # Windows host IP
+    ssh_user: str          # SSH username (optional, uses current user)
+    adb_path: str = "C:\\Android\\platform-tools\\adb.exe"
+    ssh_key: str | None = None  # Path to SSH key (optional)
 ```
 
-**Tests**: tests/unit/test_remote_access.py::TestPasswordGeneration
-**Implementation Agent**: TBD
-**Validation Agent**: TBD
-**Evidence**: records/remote-access/evidence/password-generation/
-
----
-
-## Task: Implement GUI Testing Auto-Setup
-
-- [x] Planned - 2024-02-01
-- [ ] Implemented
-- [ ] Mock tested
-- [ ] Integration tested
-- [ ] Live tested
-- [ ] Spec compliant
-
-**Description**: Auto-setup VNC when GUI testing starts.
-
-**Acceptance Criteria**:
-1. `setup_gui_testing(test_context)` method
-2. Automatically start VNC session
-3. Configure resolution based on test requirements
-4. Enable websocket for browser access
-5. Notify user via notifications module with connection info
-6. Return VNCSession for test use
-
-**Integration with Testing Module**:
+**Usage Pattern**:
 ```python
-async def setup_gui_testing(test_context: dict) -> VNCSession:
-    """Auto-setup VNC for GUI testing."""
-    vnc = VNCManager()
-    session = await vnc.start_session(
-        display=":99",
-        resolution="1920x1080",
-        websocket=True
-    )
-    await notifications.notify(
-        type=NotificationType.INFO,
-        title="GUI Testing Started",
-        message=f"VNC available at localhost:{session.port}",
-        context={"vnc_port": session.port, "vnc_password": session.password}
-    )
-    return session
+# Interview phase detects SSH is available
+ssh_client = SSHADBClient(config)
+
+# Run ADB commands via SSH
+devices = await ssh_client.list_devices()
+# Internally runs: ssh 192.168.68.138 "C:\Android\...\adb.exe devices"
+
+screenshot = await ssh_client.take_screenshot()
+# Runs screencap on device, pulls to Windows, then fetches via SSH/SCP
 ```
 
-**Tests**: tests/unit/test_remote_access.py::TestGUITestingSetup
-**Implementation Agent**: TBD
-**Validation Agent**: TBD
-**Evidence**: records/remote-access/evidence/gui-testing-setup/
+**Connectivity Test Order**:
+1. Test SSH connectivity to Windows host
+2. If SSH works → use SSH-based ADB (preferred)
+3. If SSH fails → try direct network ADB (fallback)
+4. If both fail → report error with troubleshooting steps
+
+**Tests**: tests/live/test_remote_access_live.py::TestWindowsADBClientLive
+**Implementation Agent**: Claude Opus 4.5
+**Validation Agent**: Live test verification
+**Evidence**: records/remote-access/evidence/ssh-adb/
 
 ---
 
@@ -270,44 +355,53 @@ async def setup_gui_testing(test_context: dict) -> VNCSession:
 
 | Task | Planned | Implemented | Mock | Integration | Live | Spec |
 |------|:-------:|:-----------:|:----:|:-----------:|:----:|:----:|
-| VNCManager Base Class | [x] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| VNC Session Lifecycle | [x] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| Display Server Detection | [x] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| VNC Dependencies Installation | [x] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| noVNC Browser Access | [x] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| Secure Password Generation | [x] | [ ] | [ ] | [ ] | [ ] | [ ] |
-| GUI Testing Auto-Setup | [x] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| WSL2 Environment Detection | [x] | [x] | [x] | [x] | [x] | [x] |
+| Windows Host ADB Connectivity | [x] | [x] | [x] | [x] | [x] | [x] |
+| **SSH-based ADB Connectivity** | [x] | [x] | [x] | [x] | [x] | [x] |
+| Appium Server Management | [x] | [x] | [x] | [x] | [x] | [x] |
+| Android Emulator Control | [x] | [x] | [x] | [x] | [x] | [x] |
+| Interview Phase Android Questions | [x] | [x] | [x] | [x] | [x] | [x] |
+| VNCManager Base Class | [x] | [x] | [x] | [x] | [x] | [x] |
+| VNC Session Lifecycle | [x] | [x] | [x] | [x] | [x] | [x] |
 
-**Overall Progress**: 0/7 implemented, 0/7 mock tested, 0/7 integration tested, 0/7 live tested, 0/7 spec compliant
+**Overall Progress**: 8/8 implemented, 8/8 mock tested, 8/8 integration tested, 8/8 live tested, 8/8 spec compliant
 
 ---
 
 ## Implementation Priority
 
-This module is **OPTIONAL for v1.0** but essential for:
+This module is **REQUIRED for v1.0** to support:
+- Android application testing via Appium
 - GUI application testing (desktop apps, Electron, games)
 - Remote debugging and observation
 - Screenshot-based test validation
 
 **Recommended Implementation Order**:
-1. Secure Password Generation (foundation)
-2. Display Server Detection (needed first)
-3. VNCManager Base Class (core class)
-4. VNC Session Lifecycle (primary functionality)
-5. VNC Dependencies Installation (auto-setup)
-6. noVNC Browser Access (convenience)
-7. GUI Testing Auto-Setup (integration)
+1. WSL2 Environment Detection (foundation for strategy selection)
+2. SSH-based ADB Connectivity (PREFERRED for WSL2 - bypasses firewall)
+3. Windows Host ADB Connectivity (fallback if SSH unavailable)
+4. Appium Server Management (core Android testing)
+5. Android Emulator Control (device management)
+6. Interview Phase Android Questions (user configuration)
+7. VNCManager Base Class (GUI testing)
+8. VNC Session Lifecycle (GUI testing)
 
 **Platform Support**:
-| Platform | VNC Server | Display Server | Notes |
-|----------|------------|----------------|-------|
-| Linux | x11vnc | Xvfb/native | Primary support |
-| macOS | builtin | XQuartz | Requires XQuartz install |
-| Windows | TightVNC | native | WSL2 via vcxsrv |
-| WSL2 | x11vnc | Xvfb | Requires VcXsrv on Windows |
+| Platform | Android Testing | ADB Method | VNC Server |
+|----------|-----------------|------------|------------|
+| Linux | Local emulator | Direct | x11vnc |
+| macOS | Local emulator | Direct | builtin |
+| WSL2 | Windows host | SSH (preferred) or Network | x11vnc |
+| Windows | Local emulator | Direct | TightVNC |
 
 **Dependencies**:
-- Requires Xvfb or native display server
-- Requires x11vnc for VNC serving
+- Android SDK (for local testing)
+- Node.js + Appium (for mobile testing)
+- Xvfb or native display server (for VNC)
+- x11vnc for VNC serving
 - Optional: websockify for browser access
-- Optional: noVNC HTML files for web UI
+- **For WSL2 Android testing**:
+  - SSH client in WSL2 (usually pre-installed)
+  - OpenSSH Server on Windows host (preferred)
+  - SSH key authentication configured (recommended)
+  - Windows Android SDK at known path (C:\Android recommended)
