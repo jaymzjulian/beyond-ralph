@@ -136,30 +136,51 @@ def build_continuation_prompt(state: dict, incomplete_tasks: int, quota_msg: str
     """Build the prompt to continue working."""
     phase = state.get("phase", "unknown")
     spec_path = state.get("spec_path", "")
+    remaining = state.get("remaining_tasks", [])
 
-    return f"""You are the Beyond Ralph Orchestrator. CONTINUE WORKING.
+    # Build a concrete next action
+    next_action = "Read records/*/tasks.md to find the next incomplete task"
+    if remaining:
+        next_task = remaining[0]
+        next_action = f"Work on task {next_task} - check records/ for its status and requirements"
+
+    return f"""STOP HOOK TRIGGERED - You have {incomplete_tasks} incomplete tasks remaining.
+
+IMMEDIATE ACTION REQUIRED:
+{next_action}
 
 Current state:
 - Phase: {phase}
 - Spec: {spec_path}
-- Incomplete tasks: {incomplete_tasks}
+- Incomplete: {incomplete_tasks} tasks
 - {quota_msg}
 
-DO NOT STOP. Continue executing the current phase.
-Check PROJECT_PLAN.md and records/*/tasks.md for what needs to be done.
-Work through phases until ALL tasks have 6/6 checkboxes.
+INSTRUCTIONS:
+1. Read the task files in records/*/tasks.md
+2. Find tasks with unchecked boxes [ ]
+3. Use the Task tool to spawn agents for implementation/testing
+4. Mark checkboxes as complete when verified
+5. Repeat until all tasks have 6/6 checkboxes ✓
 
-Use the Task tool to spawn agents for implementation and testing.
-After EVERY action, check if you should continue to the next phase.
-
-Output AUTOMATION_COMPLETE only when all tasks are truly complete (6/6 checkboxes)."""
+You MUST continue working. Output AUTOMATION_COMPLETE only when all {incomplete_tasks} remaining tasks are done."""
 
 
 def main():
     """Main stop hook logic."""
-    # Read hook input
+    # Read hook input first
     hook_input = read_hook_input()
     transcript_path = hook_input.get("transcript_path", "")
+    stop_hook_active = hook_input.get("stop_hook_active", False)
+
+    # Debug logging to track hook invocations
+    debug_log = Path(".beyond_ralph_hook_debug.log")
+    try:
+        with debug_log.open("a") as f:
+            f.write(f"{datetime.now(timezone.utc).isoformat()} - Stop hook invoked\n")
+            f.write(f"  stop_hook_active: {stop_hook_active}\n")
+            f.write(f"  hook_input keys: {list(hook_input.keys())}\n")
+    except Exception:
+        pass
 
     # Check if Beyond Ralph is active
     state = read_state()
@@ -240,13 +261,25 @@ def main():
     # Build continuation prompt
     prompt = build_continuation_prompt(state, incomplete_tasks, quota_msg)
 
-    # Output JSON to block exit and continue
+    # Method 1: JSON output with decision: block (documented approach)
+    # According to docs: "decision": "block" prevents Claude from stopping
     result = {
         "decision": "block",
-        "reason": prompt,
-        "systemMessage": f"🔄 Beyond Ralph continuing... Phase: {state.get('phase', '?')} | {incomplete_tasks} tasks remaining | {quota_msg}"
+        "reason": prompt
     }
 
+    # Log debug info to file
+    debug_log = Path(".beyond_ralph_hook_debug.log")
+    try:
+        with debug_log.open("a") as f:
+            f.write(f"{datetime.now(timezone.utc).isoformat()} - Returning block decision\n")
+            f.write(f"  Phase: {state.get('phase', '?')}\n")
+            f.write(f"  Incomplete: {incomplete_tasks}\n")
+            f.write(f"  JSON: {json.dumps(result)[:200]}...\n\n")
+    except Exception:
+        pass
+
+    # Output clean JSON to stdout (only this should go to stdout!)
     print(json.dumps(result))
     sys.exit(0)
 
