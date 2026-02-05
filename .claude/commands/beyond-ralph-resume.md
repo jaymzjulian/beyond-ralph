@@ -61,7 +61,19 @@ If ANY gaps found:
   - Report gaps and schedule work
 ```
 
-### 6. Resume or Re-plan
+### 6. SET STATE TO RUNNING (CRITICAL)
+**Before doing any work, update `.beyond_ralph_state`:**
+```json
+{
+  "state": "running",
+  "phase": "<current_phase>",
+  "last_activity": "<current_timestamp>"
+}
+```
+
+This is MANDATORY - the stop hook only blocks exit when state is "running" or "in_progress". Without this, the autonomous loop will not work!
+
+### 7. Resume or Re-plan
 Based on validation:
 
 **If spec unchanged AND all validations pass:**
@@ -136,4 +148,5 @@ Will auto-retry when quota resets.
 4. **Validate project plan** (compare to spec)
 5. **Validate implementations** (spot-check completions)
 6. Report gaps/changes
-7. Resume with accurate state
+7. **SET STATE TO "running"** in `.beyond_ralph_state` (CRITICAL for stop hook!)
+8. Resume work - the stop hook will now keep you running until complete
