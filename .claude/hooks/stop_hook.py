@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """Beyond Ralph Stop Hook - Keeps orchestrator running until complete.
 
-This hook:
-1. Checks if Beyond Ralph is active and incomplete
-2. Checks quota status (pauses at 85%+)
-3. Blocks exit and feeds continuation prompt if work remains
-4. Allows exit when complete or quota exceeded
+Modeled after ralph-wiggum plugin (anthropics/claude-code).
+The key insight: re-feed the SAME PROMPT back via "reason" field.
 """
 
 from __future__ import annotations
@@ -15,273 +12,173 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Add src to path for quota_checker import
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-
-def read_hook_input() -> dict:
-    """Read hook input from stdin."""
+def debug_log(msg: str) -> None:
+    """Append to debug log file."""
     try:
-        return json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, Exception):
-        return {}
-
-
-def read_state() -> dict | None:
-    """Read Beyond Ralph state file."""
-    state_file = Path(".beyond_ralph_state")
-    if not state_file.exists():
-        return None
-    try:
-        return json.loads(state_file.read_text())
-    except (json.JSONDecodeError, Exception):
-        return None
-
-
-def write_state(state: dict) -> None:
-    """Write Beyond Ralph state file."""
-    state_file = Path(".beyond_ralph_state")
-    state_file.write_text(json.dumps(state, indent=2))
-
-
-def check_quota() -> tuple[bool, str]:
-    """Check if quota is at or above limit.
-
-    Returns:
-        (is_limited, message) - True if at 85%+ quota
-    """
-    try:
-        # Try to import the quota checker
-        from beyond_ralph.utils.quota_checker import get_quota_status
-
-        status = get_quota_status()
-
-        if status.is_unknown:
-            # Unknown = fail-safe, treat as limited
-            return True, f"Quota unknown: {status.error_message}"
-        if status.is_limited:
-            return True, f"Quota at {status.session_percent:.0f}% session / {status.weekly_percent:.0f}% weekly"
-        if status.session_percent >= 85 or status.weekly_percent >= 85:
-            return True, f"Quota at {status.session_percent:.0f}% session / {status.weekly_percent:.0f}% weekly"
-        return False, f"Quota OK: {status.session_percent:.0f}% session"
-    except ImportError as e:
-        # If quota checker not available, continue anyway (soft fail)
-        return False, f"Quota checker not available: {e}"
-    except Exception as e:
-        return False, f"Quota check error: {e}"
-
-
-def count_incomplete_tasks() -> int:
-    """Count incomplete task checkboxes in records."""
-    records_dir = Path("records")
-    if not records_dir.exists():
-        return 0
-
-    incomplete = 0
-    for tasks_file in records_dir.glob("*/tasks.md"):
-        try:
-            content = tasks_file.read_text()
-            incomplete += content.count("[ ]")
-        except Exception:
-            continue
-    return incomplete
-
-
-def check_completion_in_transcript(transcript_path: str) -> str | None:
-    """Check last assistant message for completion/pause signals.
-
-    Returns:
-        "complete" | "paused" | None
-    """
-    if not transcript_path or not Path(transcript_path).exists():
-        return None
-
-    try:
-        # Read JSONL transcript
-        lines = Path(transcript_path).read_text().strip().split("\n")
-
-        # Find last assistant message
-        last_assistant = None
-        for line in reversed(lines):
-            try:
-                msg = json.loads(line)
-                if msg.get("role") == "assistant":
-                    last_assistant = msg
-                    break
-            except json.JSONDecodeError:
-                continue
-
-        if not last_assistant:
-            return None
-
-        # Extract text content
-        content = last_assistant.get("message", {}).get("content", [])
-        text = ""
-        for block in content:
-            if block.get("type") == "text":
-                text += block.get("text", "")
-
-        # Check for signals
-        if "AUTOMATION_COMPLETE" in text:
-            return "complete"
-        if "PAUSED_FOR_QUOTA" in text or "QUOTA_LIMIT_REACHED" in text:
-            return "paused"
-
-        return None
-    except Exception:
-        return None
-
-
-def build_continuation_prompt(state: dict, incomplete_tasks: int, quota_msg: str) -> str:
-    """Build the prompt to continue working."""
-    phase = state.get("phase", "unknown")
-    spec_path = state.get("spec_path", "")
-    remaining = state.get("remaining_tasks", [])
-
-    # Build a concrete next action
-    next_action = "Read records/*/tasks.md to find the next incomplete task"
-    if remaining:
-        next_task = remaining[0]
-        next_action = f"Work on task {next_task} - check records/ for its status and requirements"
-
-    return f"""STOP HOOK TRIGGERED - You have {incomplete_tasks} incomplete tasks remaining.
-
-IMMEDIATE ACTION REQUIRED:
-{next_action}
-
-Current state:
-- Phase: {phase}
-- Spec: {spec_path}
-- Incomplete: {incomplete_tasks} tasks
-- {quota_msg}
-
-INSTRUCTIONS:
-1. Read the task files in records/*/tasks.md
-2. Find tasks with unchecked boxes [ ]
-3. Use the Task tool to spawn agents for implementation/testing
-4. Mark checkboxes as complete when verified
-5. Repeat until all tasks have 6/6 checkboxes ✓
-
-You MUST continue working. Output AUTOMATION_COMPLETE only when all {incomplete_tasks} remaining tasks are done."""
-
-
-def main():
-    """Main stop hook logic."""
-    # Read hook input first
-    hook_input = read_hook_input()
-    transcript_path = hook_input.get("transcript_path", "")
-    stop_hook_active = hook_input.get("stop_hook_active", False)
-
-    # Debug logging to track hook invocations
-    debug_log = Path(".beyond_ralph_hook_debug.log")
-    try:
-        with debug_log.open("a") as f:
-            f.write(f"{datetime.now(timezone.utc).isoformat()} - Stop hook invoked\n")
-            f.write(f"  stop_hook_active: {stop_hook_active}\n")
-            f.write(f"  hook_input keys: {list(hook_input.keys())}\n")
+        with Path(".beyond_ralph_hook_debug.log").open("a") as f:
+            f.write(f"{datetime.now(timezone.utc).isoformat()} - {msg}\n")
     except Exception:
         pass
 
-    # Check if Beyond Ralph is active
-    state = read_state()
-    if not state:
-        # No active project - allow exit
-        sys.exit(0)
+
+def allow_exit() -> None:
+    """Allow Claude to stop (exit cleanly with no JSON)."""
+    sys.exit(0)
+
+
+def block_exit(prompt: str, iteration: int, incomplete: int) -> None:
+    """Block Claude from stopping and re-feed the prompt."""
+    result = {
+        "decision": "block",
+        "reason": prompt,
+        "systemMessage": f"\U0001f504 Beyond Ralph iteration {iteration} | {incomplete} tasks remaining | Output AUTOMATION_COMPLETE when done"
+    }
+    debug_log(f"Returning block: iteration={iteration}, incomplete={incomplete}")
+    debug_log(f"  JSON (first 300): {json.dumps(result)[:300]}...")
+    # Only stdout output is the JSON
+    print(json.dumps(result))
+    sys.exit(0)
+
+
+def main() -> None:
+    """Main stop hook logic."""
+    # Read hook input from stdin
+    try:
+        hook_input = json.loads(sys.stdin.read())
+    except Exception:
+        hook_input = {}
+
+    stop_hook_active = hook_input.get("stop_hook_active", False)
+    transcript_path = hook_input.get("transcript_path", "")
+
+    debug_log(f"Stop hook invoked (stop_hook_active={stop_hook_active})")
+
+    # Check if Beyond Ralph state file exists
+    state_file = Path(".beyond_ralph_state")
+    if not state_file.exists():
+        debug_log("No state file - allowing exit")
+        allow_exit()
+
+    try:
+        state = json.loads(state_file.read_text())
+    except Exception:
+        debug_log("State file unreadable - allowing exit")
+        allow_exit()
 
     br_state = state.get("state", "unknown")
 
-    # Track iterations for safety (prevent truly infinite loops)
-    # Default to 10000 - Beyond Ralph can run for days with many iterations
-    iteration = state.get("hook_iteration", 0) + 1
-    max_iterations = state.get("max_iterations", 10000)  # Very high for autonomous operation
+    # Terminal states - allow exit
+    terminal_states = ("complete", "done", "finished", "stopped", "cancelled", "error")
+    if br_state in terminal_states:
+        debug_log(f"Terminal state ({br_state}) - allowing exit")
+        allow_exit()
 
-    if iteration > max_iterations:
-        print(f"🛑 Beyond Ralph: Max iterations ({max_iterations}) reached. Stopping.", file=sys.stderr)
+    # Human wait states - allow exit
+    human_wait_states = ("waiting_for_human", "awaiting_input", "blocked_on_user", "needs_human")
+    if br_state in human_wait_states:
+        debug_log(f"Human wait state ({br_state}) - allowing exit")
+        allow_exit()
+
+    # Track iterations
+    iteration = state.get("hook_iteration", 0) + 1
+    max_iterations = state.get("max_iterations", 10000)
+
+    if max_iterations > 0 and iteration > max_iterations:
+        debug_log(f"Max iterations ({max_iterations}) reached - allowing exit")
         state["state"] = "stopped"
         state["stop_reason"] = "max_iterations"
-        write_state(state)
-        sys.exit(0)
+        state_file.write_text(json.dumps(state, indent=2))
+        allow_exit()
 
-    # Update iteration counter
-    state["hook_iteration"] = iteration
+    # Check for AUTOMATION_COMPLETE in transcript (like ralph-wiggum checks <promise>)
+    if transcript_path and Path(transcript_path).exists():
+        try:
+            last_text = ""
+            for line in reversed(Path(transcript_path).read_text().strip().split("\n")):
+                try:
+                    msg = json.loads(line)
+                    if msg.get("role") == "assistant":
+                        content = msg.get("message", {}).get("content", [])
+                        for block in content:
+                            if block.get("type") == "text":
+                                last_text += block.get("text", "")
+                        break
+                except (json.JSONDecodeError, KeyError):
+                    continue
 
-    # Only allow exit if project is truly complete OR waiting for human input
-    # Terminal states = work is done or blocked on external action
-    # Any other state (running, in_progress, mvp_complete, etc.) should continue
-    # if there are incomplete tasks
-    terminal_states = ("complete", "done", "finished", "stopped", "cancelled", "error")
-    # States that explicitly require human action - NOT "paused" which may be quota-related
-    human_wait_states = ("waiting_for_human", "awaiting_input", "blocked_on_user", "needs_human")
+            if "AUTOMATION_COMPLETE" in last_text:
+                debug_log("Found AUTOMATION_COMPLETE in transcript - allowing exit")
+                state["state"] = "complete"
+                state_file.write_text(json.dumps(state, indent=2))
+                allow_exit()
 
-    if br_state in terminal_states:
-        print(f"✅ Beyond Ralph: Project in terminal state ({br_state})", file=sys.stderr)
-        sys.exit(0)
-
-    if br_state in human_wait_states:
-        print(f"⏸️  Beyond Ralph: Waiting for human ({br_state})", file=sys.stderr)
-        sys.exit(0)
-
-    # Check for completion signals in transcript
-    signal = check_completion_in_transcript(transcript_path)
-    if signal == "complete":
-        print("✅ Beyond Ralph: Project complete!", file=sys.stderr)
-        state["state"] = "complete"
-        write_state(state)
-        sys.exit(0)
-    elif signal == "paused":
-        print("⏸️  Beyond Ralph: Paused by request", file=sys.stderr)
-        state["state"] = "paused"
-        write_state(state)
-        sys.exit(0)
+            if "PAUSED_FOR_QUOTA" in last_text or "QUOTA_LIMIT_REACHED" in last_text:
+                debug_log("Found quota pause signal - allowing exit")
+                state["state"] = "paused"
+                state_file.write_text(json.dumps(state, indent=2))
+                allow_exit()
+        except Exception as e:
+            debug_log(f"Transcript read error: {e}")
 
     # Check quota
-    is_limited, quota_msg = check_quota()
-    if is_limited:
-        print(f"⏸️  Beyond Ralph: Paused for quota - {quota_msg}", file=sys.stderr)
-        state["state"] = "paused"
-        state["pause_reason"] = quota_msg
-        write_state(state)
-        sys.exit(0)
+    try:
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+        from beyond_ralph.utils.quota_checker import get_quota_status
+        status = get_quota_status()
+        if not status.is_unknown and (status.session_percent >= 85 or status.weekly_percent >= 85):
+            debug_log(f"Quota limited ({status.session_percent}%/{status.weekly_percent}%) - allowing exit")
+            state["state"] = "paused"
+            state["pause_reason"] = "quota"
+            state_file.write_text(json.dumps(state, indent=2))
+            allow_exit()
+    except Exception:
+        pass  # Quota check failure = continue anyway
 
     # Count incomplete tasks
-    incomplete_tasks = count_incomplete_tasks()
+    incomplete = 0
+    records_dir = Path("records")
+    if records_dir.exists():
+        for tf in records_dir.glob("*/tasks.md"):
+            try:
+                incomplete += tf.read_text().count("[ ]")
+            except Exception:
+                continue
 
-    if incomplete_tasks == 0:
-        # All tasks complete!
-        print("✅ Beyond Ralph: All tasks complete!", file=sys.stderr)
+    if incomplete == 0:
+        debug_log("All tasks complete - allowing exit")
         state["state"] = "complete"
-        write_state(state)
-        sys.exit(0)
+        state_file.write_text(json.dumps(state, indent=2))
+        allow_exit()
 
-    # Not complete - continue working
-    # Update state
+    # === NOT COMPLETE - BLOCK EXIT AND RE-FEED PROMPT ===
+    # Key insight from ralph-wiggum: feed the SAME PROMPT back, not generic instructions.
+    # The prompt is stored in the state file by /beyond-ralph or /beyond-ralph-resume.
+
+    # Update iteration
+    state["hook_iteration"] = iteration
     state["last_activity"] = datetime.now(timezone.utc).isoformat()
-    write_state(state)
+    state_file.write_text(json.dumps(state, indent=2))
 
-    # Build continuation prompt
-    prompt = build_continuation_prompt(state, incomplete_tasks, quota_msg)
+    # Get the stored prompt to re-feed (like ralph-wiggum's PROMPT_TEXT)
+    prompt = state.get("prompt", "")
 
-    # Method 1: JSON output with decision: block (documented approach)
-    # According to docs: "decision": "block" prevents Claude from stopping
-    result = {
-        "decision": "block",
-        "reason": prompt
-    }
+    if not prompt:
+        # Fallback: build a prompt from state if none was stored
+        phase = state.get("phase", "unknown")
+        spec_path = state.get("spec_path", "")
+        prompt = f"""You are the Beyond Ralph Orchestrator. You have {incomplete} incomplete tasks.
 
-    # Log debug info to file
-    debug_log = Path(".beyond_ralph_hook_debug.log")
-    try:
-        with debug_log.open("a") as f:
-            f.write(f"{datetime.now(timezone.utc).isoformat()} - Returning block decision\n")
-            f.write(f"  Phase: {state.get('phase', '?')}\n")
-            f.write(f"  Incomplete: {incomplete_tasks}\n")
-            f.write(f"  JSON: {json.dumps(result)[:200]}...\n\n")
-    except Exception:
-        pass
+Read records/*/tasks.md to find incomplete tasks ([ ] checkboxes).
+Use the Task tool to spawn agents for implementation and testing.
+Mark checkboxes as complete [x] when verified.
+Continue until ALL tasks have 6/6 checkboxes.
 
-    # Output clean JSON to stdout (only this should go to stdout!)
-    print(json.dumps(result))
-    sys.exit(0)
+Phase: {phase} | Spec: {spec_path}
+
+Output AUTOMATION_COMPLETE only when all {incomplete} remaining tasks are done."""
+
+    block_exit(prompt, iteration, incomplete)
 
 
 if __name__ == "__main__":

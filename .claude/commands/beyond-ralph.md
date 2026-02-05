@@ -125,16 +125,20 @@ Before spawning agents:
 
 ## State File
 
-Persist state to `.beyond_ralph_state`:
+Persist state to `.beyond_ralph_state`. The `prompt` field is CRITICAL - the stop hook re-feeds this same prompt on each iteration to keep you working:
 ```json
 {
   "project_id": "br-xxxxx",
   "phase": "implementation",
   "state": "running",
   "spec_path": "SPEC.md",
-  "last_activity": "2026-02-03T..."
+  "last_activity": "2026-02-03T...",
+  "hook_iteration": 0,
+  "prompt": "You are the Beyond Ralph Orchestrator. You have N incomplete tasks.\n\nRead records/*/tasks.md to find incomplete tasks.\nUse the Task tool to spawn agents.\nMark checkboxes as complete when verified.\nContinue until ALL tasks have 6/6 checkboxes.\n\nPhase: implementation | Spec: SPEC.md\n\nOutput AUTOMATION_COMPLETE only when all N remaining tasks are done."
 }
 ```
+
+**You MUST update the `prompt` field whenever you write the state file.** Include the current phase, spec path, and task count. This is what the stop hook feeds back to you when you try to stop.
 
 ## START NOW
 

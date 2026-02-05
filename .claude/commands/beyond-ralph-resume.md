@@ -61,17 +61,21 @@ If ANY gaps found:
   - Report gaps and schedule work
 ```
 
-### 6. SET STATE TO RUNNING (CRITICAL)
-**Before doing any work, update `.beyond_ralph_state`:**
+### 6. SET STATE TO RUNNING WITH PROMPT (CRITICAL)
+**Before doing any work, update `.beyond_ralph_state` with the continuation prompt:**
 ```json
 {
   "state": "running",
   "phase": "<current_phase>",
-  "last_activity": "<current_timestamp>"
+  "last_activity": "<current_timestamp>",
+  "hook_iteration": 0,
+  "prompt": "You are the Beyond Ralph Orchestrator. You have N incomplete tasks.\n\nRead records/*/tasks.md to find incomplete tasks ([ ] checkboxes).\nUse the Task tool to spawn agents for implementation and testing.\nMark checkboxes as complete [x] when verified.\nContinue until ALL tasks have 6/6 checkboxes.\n\nPhase: PHASE | Spec: SPEC_PATH\n\nOutput AUTOMATION_COMPLETE only when all N remaining tasks are done."
 }
 ```
 
-This is MANDATORY - the stop hook only blocks exit when state is "running" or "in_progress". Without this, the autonomous loop will not work!
+The `prompt` field is CRITICAL. The stop hook re-feeds this SAME prompt back to you on each iteration (like ralph-wiggum). Without it, the stop hook falls back to a generic prompt.
+
+The `hook_iteration` reset to 0 ensures the counter starts fresh.
 
 ### 7. Resume or Re-plan
 Based on validation:
