@@ -1612,6 +1612,440 @@ class TestSemgrepParser:
         assert items == []
 
 
+class TestKotlinLinting:
+    """Tests for Kotlin linting support (ktlint, detekt, kotlinc)."""
+
+    # ===== ktlint parser tests =====
+
+    def test_parse_ktlint_empty(self, tmp_path):
+        """Test parsing empty ktlint output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_ktlint("", "")
+        assert items == []
+
+    def test_parse_ktlint_empty_whitespace(self, tmp_path):
+        """Test parsing ktlint output with only whitespace."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_ktlint("   \n\t  ", "")
+        assert items == []
+
+    def test_parse_ktlint_standard_rule(self, tmp_path):
+        """Test ktlint standard rules map to LOW severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''[
+            {
+                "file": "src/Main.kt",
+                "errors": [
+                    {
+                        "line": 10,
+                        "column": 5,
+                        "message": "Unexpected spacing before (",
+                        "rule": "standard:paren-spacing"
+                    }
+                ]
+            }
+        ]'''
+        items = agent._parse_ktlint(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.LOW
+        assert items[0].file_path == "src/Main.kt"
+        assert items[0].line_number == 10
+        assert items[0].rule_id == "standard:paren-spacing"
+        assert items[0].category == ReviewCategory.LINT
+        assert "(column 5)" in items[0].message
+
+    def test_parse_ktlint_experimental_rule(self, tmp_path):
+        """Test ktlint experimental rules map to INFO severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''[
+            {
+                "file": "src/Utils.kt",
+                "errors": [
+                    {
+                        "line": 25,
+                        "column": 1,
+                        "message": "First line in a method block should not be empty",
+                        "rule": "experimental:no-empty-first-line-in-method-block"
+                    }
+                ]
+            }
+        ]'''
+        items = agent._parse_ktlint(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.INFO
+        assert items[0].rule_id == "experimental:no-empty-first-line-in-method-block"
+
+    def test_parse_ktlint_android_rule(self, tmp_path):
+        """Test ktlint android rules map to MEDIUM severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''[
+            {
+                "file": "app/src/main/java/com/example/MainActivity.kt",
+                "errors": [
+                    {
+                        "line": 15,
+                        "column": 1,
+                        "message": "Max line length exceeded",
+                        "rule": "android:max-line-length"
+                    }
+                ]
+            }
+        ]'''
+        items = agent._parse_ktlint(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.MEDIUM
+        assert items[0].rule_id == "android:max-line-length"
+
+    def test_parse_ktlint_error_in_message(self, tmp_path):
+        """Test ktlint errors (parse errors) map to HIGH severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''[
+            {
+                "file": "src/Broken.kt",
+                "errors": [
+                    {
+                        "line": 5,
+                        "column": 10,
+                        "message": "Syntax error: unexpected token",
+                        "rule": ""
+                    }
+                ]
+            }
+        ]'''
+        items = agent._parse_ktlint(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.HIGH
+        assert items[0].rule_id is None
+
+    def test_parse_ktlint_multiple_errors_multiple_files(self, tmp_path):
+        """Test parsing ktlint output with multiple files and errors."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''[
+            {
+                "file": "src/Main.kt",
+                "errors": [
+                    {"line": 10, "column": 1, "message": "Issue 1", "rule": "standard:rule1"},
+                    {"line": 20, "column": 5, "message": "Issue 2", "rule": "experimental:rule2"}
+                ]
+            },
+            {
+                "file": "src/Utils.kt",
+                "errors": [
+                    {"line": 5, "column": 3, "message": "Issue 3", "rule": "android:rule3"}
+                ]
+            }
+        ]'''
+        items = agent._parse_ktlint(stdout, "")
+        assert len(items) == 3
+        assert items[0].file_path == "src/Main.kt"
+        assert items[0].severity == ReviewSeverity.LOW
+        assert items[1].file_path == "src/Main.kt"
+        assert items[1].severity == ReviewSeverity.INFO
+        assert items[2].file_path == "src/Utils.kt"
+        assert items[2].severity == ReviewSeverity.MEDIUM
+
+    def test_parse_ktlint_invalid_json(self, tmp_path):
+        """Test parsing invalid ktlint JSON gracefully."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_ktlint("not valid json {", "")
+        assert items == []
+
+    def test_parse_ktlint_no_column(self, tmp_path):
+        """Test ktlint output without column doesn't include column in message."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''[
+            {
+                "file": "src/Main.kt",
+                "errors": [
+                    {"line": 10, "message": "Issue without column", "rule": "standard:rule"}
+                ]
+            }
+        ]'''
+        items = agent._parse_ktlint(stdout, "")
+        assert len(items) == 1
+        assert "(column" not in items[0].message
+
+    # ===== detekt parser tests =====
+
+    def test_parse_detekt_empty(self, tmp_path):
+        """Test parsing empty detekt output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_detekt("", "")
+        assert items == []
+
+    def test_parse_detekt_empty_whitespace(self, tmp_path):
+        """Test parsing detekt output with only whitespace."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_detekt("   \n  ", "")
+        assert items == []
+
+    def test_parse_detekt_error_severity(self, tmp_path):
+        """Test detekt error level maps to CRITICAL severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{
+            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [{
+                "tool": {"driver": {"name": "detekt"}},
+                "results": [{
+                    "ruleId": "complexity:TooManyFunctions",
+                    "level": "error",
+                    "message": {"text": "Too many functions in class"},
+                    "locations": [{
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": "src/Large.kt"},
+                            "region": {"startLine": 100}
+                        }
+                    }]
+                }]
+            }]
+        }'''
+        items = agent._parse_detekt(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.CRITICAL
+        assert items[0].file_path == "src/Large.kt"
+        assert items[0].line_number == 100
+        assert items[0].rule_id == "complexity:TooManyFunctions"
+        assert items[0].category == ReviewCategory.LINT
+
+    def test_parse_detekt_warning_severity(self, tmp_path):
+        """Test detekt warning level maps to HIGH severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{
+            "version": "2.1.0",
+            "runs": [{
+                "tool": {"driver": {"name": "detekt"}},
+                "results": [{
+                    "ruleId": "potential-bugs:CastToNullableType",
+                    "level": "warning",
+                    "message": {"text": "Cast to nullable type"},
+                    "locations": [{
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": "src/Utils.kt"},
+                            "region": {"startLine": 50}
+                        }
+                    }]
+                }]
+            }]
+        }'''
+        items = agent._parse_detekt(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.HIGH
+
+    def test_parse_detekt_note_severity(self, tmp_path):
+        """Test detekt note level maps to MEDIUM severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{
+            "version": "2.1.0",
+            "runs": [{
+                "tool": {"driver": {"name": "detekt"}},
+                "results": [{
+                    "ruleId": "comments:UndocumentedPublicFunction",
+                    "level": "note",
+                    "message": {"text": "Missing documentation"},
+                    "locations": [{
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": "src/Api.kt"},
+                            "region": {"startLine": 30}
+                        }
+                    }]
+                }]
+            }]
+        }'''
+        items = agent._parse_detekt(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.MEDIUM
+
+    def test_parse_detekt_style_rule_low_severity(self, tmp_path):
+        """Test detekt style rules map to LOW severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{
+            "version": "2.1.0",
+            "runs": [{
+                "tool": {"driver": {"name": "detekt"}},
+                "results": [{
+                    "ruleId": "style:WildcardImport",
+                    "level": "warning",
+                    "message": {"text": "Wildcard import used"},
+                    "locations": [{
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": "src/App.kt"},
+                            "region": {"startLine": 3}
+                        }
+                    }]
+                }]
+            }]
+        }'''
+        items = agent._parse_detekt(stdout, "")
+        assert len(items) == 1
+        # style: prefix should make it LOW even though level is warning
+        assert items[0].severity == ReviewSeverity.LOW
+
+    def test_parse_detekt_formatting_rule_low_severity(self, tmp_path):
+        """Test detekt formatting rules map to LOW severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{
+            "version": "2.1.0",
+            "runs": [{
+                "tool": {"driver": {"name": "detekt"}},
+                "results": [{
+                    "ruleId": "formatting:Indentation",
+                    "level": "error",
+                    "message": {"text": "Wrong indentation"},
+                    "locations": [{"physicalLocation": {"artifactLocation": {"uri": "a.kt"}, "region": {"startLine": 1}}}]
+                }]
+            }]
+        }'''
+        items = agent._parse_detekt(stdout, "")
+        assert len(items) == 1
+        # formatting: prefix should make it LOW
+        assert items[0].severity == ReviewSeverity.LOW
+
+    def test_parse_detekt_naming_rule_low_severity(self, tmp_path):
+        """Test detekt naming rules map to LOW severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{
+            "version": "2.1.0",
+            "runs": [{
+                "tool": {"driver": {"name": "detekt"}},
+                "results": [{
+                    "ruleId": "naming:FunctionNaming",
+                    "level": "warning",
+                    "message": {"text": "Function name does not follow convention"},
+                    "locations": [{"physicalLocation": {"artifactLocation": {"uri": "b.kt"}, "region": {"startLine": 5}}}]
+                }]
+            }]
+        }'''
+        items = agent._parse_detekt(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.LOW
+
+    def test_parse_detekt_multiple_results(self, tmp_path):
+        """Test parsing detekt output with multiple results."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{
+            "version": "2.1.0",
+            "runs": [{
+                "tool": {"driver": {"name": "detekt"}},
+                "results": [
+                    {"ruleId": "r1", "level": "error", "message": {"text": "m1"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "a.kt"}, "region": {"startLine": 1}}}]},
+                    {"ruleId": "r2", "level": "warning", "message": {"text": "m2"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "b.kt"}, "region": {"startLine": 2}}}]},
+                    {"ruleId": "style:r3", "level": "note", "message": {"text": "m3"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "c.kt"}, "region": {"startLine": 3}}}]}
+                ]
+            }]
+        }'''
+        items = agent._parse_detekt(stdout, "")
+        assert len(items) == 3
+        assert items[0].severity == ReviewSeverity.CRITICAL
+        assert items[1].severity == ReviewSeverity.HIGH
+        assert items[2].severity == ReviewSeverity.LOW  # style prefix
+
+    def test_parse_detekt_invalid_json(self, tmp_path):
+        """Test parsing invalid detekt JSON gracefully."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_detekt("not valid json", "")
+        assert items == []
+
+    def test_parse_detekt_no_locations(self, tmp_path):
+        """Test detekt result without locations."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = '''{
+            "version": "2.1.0",
+            "runs": [{
+                "tool": {"driver": {"name": "detekt"}},
+                "results": [{
+                    "ruleId": "some-rule",
+                    "level": "warning",
+                    "message": {"text": "Issue without location"},
+                    "locations": []
+                }]
+            }]
+        }'''
+        items = agent._parse_detekt(stdout, "")
+        assert len(items) == 1
+        assert items[0].file_path == ""
+        assert items[0].line_number is None
+
+    # ===== kotlinc parser tests =====
+
+    def test_parse_kotlinc_empty(self, tmp_path):
+        """Test parsing empty kotlinc output."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        items = agent._parse_kotlinc("", "")
+        assert items == []
+
+    def test_parse_kotlinc_error(self, tmp_path):
+        """Test kotlinc error maps to CRITICAL severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stderr = "src/Main.kt:10:5: error: unresolved reference: foo"
+        items = agent._parse_kotlinc("", stderr)
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.CRITICAL
+        assert items[0].file_path == "src/Main.kt"
+        assert items[0].line_number == 10
+        assert items[0].rule_id == "kotlinc-error"
+        assert items[0].category == ReviewCategory.TYPE
+        assert "(column 5)" in items[0].message
+
+    def test_parse_kotlinc_warning(self, tmp_path):
+        """Test kotlinc warning maps to HIGH severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stderr = "src/Utils.kt:25:1: warning: parameter 'x' is never used"
+        items = agent._parse_kotlinc("", stderr)
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.HIGH
+        assert items[0].rule_id == "kotlinc-warning"
+
+    def test_parse_kotlinc_info(self, tmp_path):
+        """Test kotlinc info maps to LOW severity."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stderr = "src/Config.kt:5:3: info: consider using data class"
+        items = agent._parse_kotlinc("", stderr)
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.LOW
+        assert items[0].rule_id == "kotlinc-info"
+
+    def test_parse_kotlinc_kts_file(self, tmp_path):
+        """Test kotlinc parser handles .kts script files."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stderr = "build.gradle.kts:15:10: error: unresolved reference: implementation"
+        items = agent._parse_kotlinc("", stderr)
+        assert len(items) == 1
+        assert items[0].file_path == "build.gradle.kts"
+        assert items[0].severity == ReviewSeverity.CRITICAL
+
+    def test_parse_kotlinc_multiple_errors(self, tmp_path):
+        """Test parsing kotlinc output with multiple errors."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stderr = """src/Main.kt:10:5: error: unresolved reference: foo
+src/Main.kt:15:3: warning: unused variable: bar
+src/Utils.kt:20:1: error: type mismatch"""
+        items = agent._parse_kotlinc("", stderr)
+        assert len(items) == 3
+        assert items[0].severity == ReviewSeverity.CRITICAL
+        assert items[1].severity == ReviewSeverity.HIGH
+        assert items[2].severity == ReviewSeverity.CRITICAL
+
+    def test_parse_kotlinc_from_stdout(self, tmp_path):
+        """Test kotlinc parser can read from stdout if stderr is empty."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stdout = "src/Main.kt:10:5: error: some error"
+        items = agent._parse_kotlinc(stdout, "")
+        assert len(items) == 1
+        assert items[0].severity == ReviewSeverity.CRITICAL
+
+    def test_parse_kotlinc_ignores_non_matching_lines(self, tmp_path):
+        """Test kotlinc parser ignores lines that don't match the pattern."""
+        agent = CodeReviewAgent(project_root=tmp_path)
+        stderr = """Compiling...
+src/Main.kt:10:5: error: actual error
+Some other output
+Finished"""
+        items = agent._parse_kotlinc("", stderr)
+        assert len(items) == 1
+        assert "actual error" in items[0].message
+
+
 class TestFindingDeduplication:
     """Tests for finding deduplication."""
 

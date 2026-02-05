@@ -8,9 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from beyond_ralph.agents.research_agent import (
+    CodeExample,
     DiscoveredTool,
     PackageManager,
     ResearchAgent,
+    ResearchResult,
     ToolCategory,
 )
 
@@ -1071,9 +1073,13 @@ class TestResearchAgentFindAndInstallEdgeCases:
                 mock_alts.return_value = []
                 with patch.object(agent, "search_for_tool", new_callable=AsyncMock) as mock_search:
                     mock_search.return_value = [discovered]
-                    with patch.object(agent, "install_tool", new_callable=AsyncMock) as mock_install:
+                    with patch.object(
+                        agent, "install_tool", new_callable=AsyncMock
+                    ) as mock_install:
                         mock_install.return_value = False  # Install fails
-                        with patch.object(agent, "read_knowledge", new_callable=AsyncMock) as mock_read:
+                        with patch.object(
+                            agent, "read_knowledge", new_callable=AsyncMock
+                        ) as mock_read:
                             mock_read.return_value = None
 
                             result = await agent.find_and_install_tool(
@@ -1177,8 +1183,9 @@ class TestResearchAgentHandleFailureEdgeCases:
                 mock_search.return_value = [searched_alt]
                 with patch.object(agent, "install_tool", new_callable=AsyncMock) as mock_install:
                     mock_install.return_value = True
-                    with patch.object(agent, "_document_failure_resolution", new_callable=AsyncMock):
-
+                    with patch.object(
+                        agent, "_document_failure_resolution", new_callable=AsyncMock
+                    ):
                         result = await agent.handle_tool_failure(
                             failed_tool="failed-tool",
                             error_message="Not working",
@@ -1250,3 +1257,2338 @@ class TestResearchAgentDocumentFailureException:
                 solution=solution,
                 platform="linux",
             )
+
+
+# ============================================================================
+# Tests for CodeExample dataclass
+# ============================================================================
+
+
+class TestCodeExample:
+    """Tests for CodeExample dataclass."""
+
+    def test_code_example_creation(self):
+        """Test creating a CodeExample."""
+        example = CodeExample(
+            language="python",
+            code="print('hello')",
+            description="Simple print statement",
+            source_url="https://example.com/tutorial",
+        )
+
+        assert example.language == "python"
+        assert example.code == "print('hello')"
+        assert example.description == "Simple print statement"
+        assert example.source_url == "https://example.com/tutorial"
+
+    def test_code_example_to_dict(self):
+        """Test CodeExample serialization to dict."""
+        example = CodeExample(
+            language="javascript",
+            code="console.log('test')",
+            description="Console logging",
+            source_url="https://docs.example.com",
+        )
+
+        data = example.to_dict()
+
+        assert data["language"] == "javascript"
+        assert data["code"] == "console.log('test')"
+        assert data["description"] == "Console logging"
+        assert data["source_url"] == "https://docs.example.com"
+
+    def test_code_example_with_multiline_code(self):
+        """Test CodeExample with multiline code."""
+        code = """def hello():
+    print('Hello, World!')
+    return True"""
+
+        example = CodeExample(
+            language="python",
+            code=code,
+            description="Function definition",
+            source_url="https://example.com",
+        )
+
+        assert example.code == code
+        assert "\n" in example.code
+
+
+# ============================================================================
+# Tests for ResearchResult dataclass
+# ============================================================================
+
+
+class TestResearchResult:
+    """Tests for ResearchResult dataclass."""
+
+    def test_research_result_creation(self):
+        """Test creating a ResearchResult."""
+        examples = [
+            CodeExample(
+                language="python",
+                code="import requests",
+                description="Import statement",
+                source_url="https://example.com",
+            )
+        ]
+
+        result = ResearchResult(
+            topic="HTTP requests",
+            summary="How to make HTTP requests in Python",
+            implementation_steps=["Install requests", "Import library", "Make request"],
+            code_examples=examples,
+            sources=["https://docs.python.org", "https://requests.readthedocs.io"],
+            confidence=0.85,
+            stored_path="beyondralph_knowledge/research-http-requests.md",
+        )
+
+        assert result.topic == "HTTP requests"
+        assert result.summary == "How to make HTTP requests in Python"
+        assert len(result.implementation_steps) == 3
+        assert len(result.code_examples) == 1
+        assert len(result.sources) == 2
+        assert result.confidence == 0.85
+        assert "research-http-requests" in result.stored_path
+
+    def test_research_result_to_dict(self):
+        """Test ResearchResult serialization to dict."""
+        examples = [
+            CodeExample(
+                language="python",
+                code="x = 1",
+                description="Variable",
+                source_url="https://example.com",
+            )
+        ]
+
+        result = ResearchResult(
+            topic="Variables",
+            summary="Variable assignment",
+            implementation_steps=["Step 1"],
+            code_examples=examples,
+            sources=["https://example.com"],
+            confidence=0.9,
+            stored_path="path/to/file.md",
+        )
+
+        data = result.to_dict()
+
+        assert data["topic"] == "Variables"
+        assert data["summary"] == "Variable assignment"
+        assert data["implementation_steps"] == ["Step 1"]
+        assert len(data["code_examples"]) == 1
+        assert data["code_examples"][0]["language"] == "python"
+        assert data["sources"] == ["https://example.com"]
+        assert data["confidence"] == 0.9
+        assert data["stored_path"] == "path/to/file.md"
+
+    def test_research_result_empty_examples(self):
+        """Test ResearchResult with no code examples."""
+        result = ResearchResult(
+            topic="Abstract concept",
+            summary="No code available",
+            implementation_steps=["Read more"],
+            code_examples=[],
+            sources=[],
+            confidence=0.3,
+            stored_path="",
+        )
+
+        assert len(result.code_examples) == 0
+        assert len(result.sources) == 0
+        assert result.stored_path == ""
+
+
+# ============================================================================
+# Tests for ResearchAgent Web Search Methods
+# ============================================================================
+
+
+class TestResearchAgentWebSearch:
+    """Tests for ResearchAgent web search functionality."""
+
+    @pytest.mark.asyncio
+    async def test_search_web_returns_list(self, tmp_path):
+        """Test _search_web returns a list."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        results = await agent._search_web("python http requests")
+
+        assert isinstance(results, list)
+
+    @pytest.mark.asyncio
+    async def test_fetch_documentation_returns_string(self, tmp_path):
+        """Test _fetch_documentation returns a string."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        with patch.object(agent.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.text = "<html>Documentation content</html>"
+            mock_get.return_value = mock_response
+
+            content = await agent._fetch_documentation("https://example.com/docs")
+
+            assert isinstance(content, str)
+            assert "Documentation" in content
+
+    @pytest.mark.asyncio
+    async def test_fetch_documentation_handles_error(self, tmp_path):
+        """Test _fetch_documentation handles HTTP errors gracefully."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        with patch.object(agent.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = Exception("Network error")
+
+            content = await agent._fetch_documentation("https://example.com/docs")
+
+            assert content == ""
+
+
+# ============================================================================
+# Tests for Source Evaluation
+# ============================================================================
+
+
+class TestResearchAgentSourceEvaluation:
+    """Tests for ResearchAgent source evaluation."""
+
+    def test_evaluate_sources_prefers_official_docs(self, tmp_path):
+        """Test that official documentation is ranked highest."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        results = [
+            {"url": "https://medium.com/some-blog", "title": "Blog post"},
+            {"url": "https://docs.python.org/3/library", "title": "Python Docs"},
+            {"url": "https://stackoverflow.com/questions/123", "title": "SO Question"},
+        ]
+
+        ranked = agent._evaluate_sources(results)
+
+        assert len(ranked) == 3
+        # Official docs should be first
+        assert "docs.python.org" in ranked[0]["url"]
+        assert ranked[0]["quality"] == 1.0
+
+    def test_evaluate_sources_ranks_stackoverflow_high(self, tmp_path):
+        """Test that Stack Overflow is ranked well."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        results = [
+            {"url": "https://random-blog.com", "title": "Random"},
+            {"url": "https://stackoverflow.com/questions/123", "title": "Answer"},
+        ]
+
+        ranked = agent._evaluate_sources(results)
+
+        # SO should have quality >= 0.8
+        so_result = next(r for r in ranked if "stackoverflow" in r["url"])
+        assert so_result["quality"] >= 0.8
+
+    def test_evaluate_sources_penalizes_medium(self, tmp_path):
+        """Test that Medium posts are penalized."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        results = [
+            {"url": "https://medium.com/@user/post", "title": "Medium Post"},
+        ]
+
+        ranked = agent._evaluate_sources(results)
+
+        assert ranked[0]["quality"] < 0.5
+
+    def test_evaluate_sources_boosts_tutorials(self, tmp_path):
+        """Test that tutorials get a quality boost."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        results = [
+            {"url": "https://example.com/article", "title": "Python Tutorial Guide"},
+        ]
+
+        ranked = agent._evaluate_sources(results)
+
+        # Should get boost for having "tutorial" and "guide" in title
+        assert ranked[0]["quality"] >= 0.5
+
+    def test_evaluate_sources_empty_list(self, tmp_path):
+        """Test evaluating empty results list."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        ranked = agent._evaluate_sources([])
+
+        assert ranked == []
+
+
+# ============================================================================
+# Tests for Code Example Extraction
+# ============================================================================
+
+
+class TestResearchAgentCodeExtraction:
+    """Tests for ResearchAgent code example extraction."""
+
+    def test_extract_code_examples_markdown(self, tmp_path):
+        """Test extracting code from markdown code blocks."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        content = """
+Here is some explanation.
+
+```python
+def hello():
+    print("Hello, World!")
+```
+
+More text here.
+"""
+
+        examples = agent._extract_code_examples(content, "https://example.com")
+
+        assert len(examples) == 1
+        assert examples[0].language == "python"
+        assert "def hello():" in examples[0].code
+        assert examples[0].source_url == "https://example.com"
+
+    def test_extract_code_examples_multiple_blocks(self, tmp_path):
+        """Test extracting multiple code blocks."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        content = """
+```python
+import requests
+response = requests.get('https://api.example.com')
+```
+
+Some explanation.
+
+```javascript
+fetch('https://api.example.com')
+    .then(response => response.json())
+```
+"""
+
+        examples = agent._extract_code_examples(content, "https://example.com")
+
+        assert len(examples) == 2
+        languages = [e.language for e in examples]
+        assert "python" in languages
+        assert "javascript" in languages
+
+    def test_extract_code_examples_skips_short_snippets(self, tmp_path):
+        """Test that very short code snippets are skipped."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        content = """
+```python
+x = 1
+```
+"""
+
+        examples = agent._extract_code_examples(content, "https://example.com")
+
+        # "x = 1" is less than 20 chars, should be skipped
+        assert len(examples) == 0
+
+    def test_extract_code_examples_keeps_install_commands(self, tmp_path):
+        """Test that shell install commands are kept."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        content = """
+```bash
+pip install requests httpx
+```
+"""
+
+        examples = agent._extract_code_examples(content, "https://example.com")
+
+        assert len(examples) == 1
+        assert "pip install" in examples[0].code
+
+    def test_extract_code_examples_empty_content(self, tmp_path):
+        """Test extracting from empty content."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        examples = agent._extract_code_examples("", "https://example.com")
+
+        assert examples == []
+
+
+# ============================================================================
+# Tests for Implementation Plan Synthesis
+# ============================================================================
+
+
+class TestResearchAgentSynthesis:
+    """Tests for ResearchAgent implementation plan synthesis."""
+
+    def test_synthesize_empty_sources(self, tmp_path):
+        """Test synthesis with no sources."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        summary, steps = agent._synthesize_implementation_plan([], "test topic")
+
+        assert "No sources found" in summary
+        assert len(steps) > 0
+        assert "official documentation" in steps[0].lower()
+
+    def test_synthesize_with_sources(self, tmp_path):
+        """Test synthesis with sources."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        sources = [
+            {
+                "url": "https://docs.example.com",
+                "title": "Official Docs",
+                "content": "Documentation content",
+                "quality": 1.0,
+            },
+            {
+                "url": "https://tutorial.com",
+                "title": "Tutorial",
+                "content": "Tutorial content",
+                "quality": 0.7,
+            },
+        ]
+
+        summary, steps = agent._synthesize_implementation_plan(sources, "authentication")
+
+        assert "authentication" in summary
+        assert "Official Docs" in summary
+        assert len(steps) >= 5
+
+    def test_synthesize_includes_quality_labels(self, tmp_path):
+        """Test that quality labels are included in summary."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        sources = [
+            {"url": "https://docs.example.com", "title": "Docs", "quality": 0.95},
+        ]
+
+        summary, _ = agent._synthesize_implementation_plan(sources, "topic")
+
+        assert "Official docs" in summary
+
+
+# ============================================================================
+# Tests for Confidence Calculation
+# ============================================================================
+
+
+class TestResearchAgentConfidence:
+    """Tests for ResearchAgent confidence calculation."""
+
+    def test_confidence_no_sources(self, tmp_path):
+        """Test confidence with no sources."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        confidence = agent._calculate_confidence([], [])
+
+        assert confidence == 0.0
+
+    def test_confidence_high_quality_sources(self, tmp_path):
+        """Test confidence with high-quality sources."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        sources = [
+            {"quality": 1.0},
+            {"quality": 0.9},
+            {"quality": 0.95},
+        ]
+        examples = [
+            CodeExample("python", "code" * 10, "desc", "url"),
+            CodeExample("python", "more code" * 5, "desc", "url"),
+        ]
+
+        confidence = agent._calculate_confidence(sources, examples)
+
+        # Should be high confidence
+        assert confidence >= 0.6
+
+    def test_confidence_low_quality_sources(self, tmp_path):
+        """Test confidence with low-quality sources."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        sources = [
+            {"quality": 0.3},
+        ]
+
+        confidence = agent._calculate_confidence(sources, [])
+
+        # Low quality, few sources, no examples = low confidence
+        assert confidence < 0.3
+
+    def test_confidence_many_examples_boost(self, tmp_path):
+        """Test that many code examples boost confidence."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        sources = [{"quality": 0.5}]
+        examples = [
+            CodeExample("python", f"code example {i}" * 5, "desc", "url") for i in range(10)
+        ]
+
+        confidence = agent._calculate_confidence(sources, examples)
+
+        # Many examples should provide boost
+        assert confidence >= 0.3
+
+    def test_confidence_bounds(self, tmp_path):
+        """Test that confidence is always between 0 and 1."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Maximum inputs
+        sources = [{"quality": 1.0} for _ in range(10)]
+        examples = [CodeExample("python", "x" * 100, "desc", "url") for _ in range(20)]
+
+        confidence = agent._calculate_confidence(sources, examples)
+
+        assert 0.0 <= confidence <= 1.0
+
+
+# ============================================================================
+# Tests for Research Storage
+# ============================================================================
+
+
+class TestResearchAgentStorage:
+    """Tests for ResearchAgent research storage."""
+
+    @pytest.mark.asyncio
+    async def test_store_research(self, tmp_path):
+        """Test storing research results."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        result = ResearchResult(
+            topic="Test Topic",
+            summary="Test summary",
+            implementation_steps=["Step 1", "Step 2"],
+            code_examples=[CodeExample("python", "print('test')" * 5, "Print", "https://ex.com")],
+            sources=["https://example.com"],
+            confidence=0.75,
+            stored_path="",
+        )
+
+        with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+            mock_write.return_value = "test-uuid"
+
+            path = await agent._store_research(result)
+
+            assert "research-test-topic" in path
+            mock_write.assert_called_once()
+            call_kwargs = mock_write.call_args.kwargs
+            assert call_kwargs["category"] == "research"
+            assert "implementation" in call_kwargs["tags"]
+
+    @pytest.mark.asyncio
+    async def test_store_research_sanitizes_topic(self, tmp_path):
+        """Test that special characters are sanitized from topic."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        result = ResearchResult(
+            topic="OAuth2/OIDC Authentication!@#$%",
+            summary="Auth summary",
+            implementation_steps=[],
+            code_examples=[],
+            sources=[],
+            confidence=0.5,
+            stored_path="",
+        )
+
+        with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+            mock_write.return_value = "uuid"
+
+            path = await agent._store_research(result)
+
+            # Should contain sanitized topic
+            assert "oauth2" in path.lower()
+            assert "/" not in path.split("/")[-1].replace(".md", "")
+
+    @pytest.mark.asyncio
+    async def test_store_research_handles_error(self, tmp_path):
+        """Test that storage errors return empty path."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        result = ResearchResult(
+            topic="Test",
+            summary="Summary",
+            implementation_steps=[],
+            code_examples=[],
+            sources=[],
+            confidence=0.5,
+            stored_path="",
+        )
+
+        with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+            mock_write.side_effect = Exception("Write failed")
+
+            path = await agent._store_research(result)
+
+            assert path == ""
+
+
+# ============================================================================
+# Tests for Full Research Implementation Flow
+# ============================================================================
+
+
+class TestResearchAgentImplementationResearch:
+    """Tests for the full research_implementation flow."""
+
+    @pytest.mark.asyncio
+    async def test_research_implementation_basic(self, tmp_path):
+        """Test basic research_implementation flow."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Mock all the internal methods
+        with patch.object(agent, "_search_web", new_callable=AsyncMock) as mock_search:
+            mock_search.return_value = [
+                {"url": "https://docs.example.com", "title": "Docs"},
+            ]
+
+            with patch.object(agent, "_fetch_documentation", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = """
+# Documentation
+
+Here is how to do it:
+
+```python
+def example_function():
+    return "example result"
+```
+"""
+
+                with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+                    mock_write.return_value = "test-uuid"
+
+                    result = await agent.research_implementation("test topic")
+
+                    assert isinstance(result, ResearchResult)
+                    assert result.topic == "test topic"
+                    assert len(result.implementation_steps) > 0
+
+    @pytest.mark.asyncio
+    async def test_research_implementation_no_sources(self, tmp_path):
+        """Test research_implementation with no search results."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        with patch.object(agent, "_search_web", new_callable=AsyncMock) as mock_search:
+            mock_search.return_value = []
+
+            with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+                mock_write.return_value = "uuid"
+
+                result = await agent.research_implementation("obscure topic")
+
+                assert result.confidence == 0.0
+                assert "No sources found" in result.summary
+
+    @pytest.mark.asyncio
+    async def test_research_implementation_fetch_failures(self, tmp_path):
+        """Test research_implementation handles fetch failures gracefully."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        with patch.object(agent, "_search_web", new_callable=AsyncMock) as mock_search:
+            mock_search.return_value = [
+                {"url": "https://failing.com", "title": "Fails"},
+                {"url": "https://working.com", "title": "Works"},
+            ]
+
+            with patch.object(agent, "_fetch_documentation", new_callable=AsyncMock) as mock_fetch:
+                # First call fails, second succeeds
+                mock_fetch.side_effect = [
+                    Exception("Network error"),
+                    "```python\nworking_code = True\n```",
+                ]
+
+                with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+                    mock_write.return_value = "uuid"
+
+                    result = await agent.research_implementation("topic")
+
+                    # Should still produce a result from the working source
+                    assert isinstance(result, ResearchResult)
+
+    @pytest.mark.asyncio
+    async def test_research_implementation_stores_result(self, tmp_path):
+        """Test that research_implementation stores results in knowledge base."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        with patch.object(agent, "_search_web", new_callable=AsyncMock) as mock_search:
+            mock_search.return_value = []
+
+            with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+                mock_write.return_value = "stored-uuid"
+
+                result = await agent.research_implementation("my topic")
+
+                mock_write.assert_called_once()
+                assert result.stored_path != "" or mock_write.called
+
+    @pytest.mark.asyncio
+    async def test_research_implementation_extracts_examples(self, tmp_path):
+        """Test that code examples are extracted from documentation."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        with patch.object(agent, "_search_web", new_callable=AsyncMock) as mock_search:
+            mock_search.return_value = [
+                {"url": "https://docs.example.com", "title": "Docs"},
+            ]
+
+            with patch.object(agent, "_fetch_documentation", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = """
+# How to authenticate
+
+```python
+import jwt
+
+def create_token(user_id):
+    payload = {"user_id": user_id}
+    return jwt.encode(payload, "secret")
+```
+
+Then use the token:
+
+```python
+token = create_token(123)
+headers = {"Authorization": f"Bearer {token}"}
+```
+"""
+
+                with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+                    mock_write.return_value = "uuid"
+
+                    result = await agent.research_implementation("JWT authentication")
+
+                    # Should extract the code examples
+                    assert len(result.code_examples) >= 1
+                    # Check that Python code was extracted
+                    python_examples = [e for e in result.code_examples if e.language == "python"]
+                    assert len(python_examples) >= 1
+
+
+# ============================================================================
+# Tests for SkillRecommendation dataclass
+# ============================================================================
+
+
+class TestSkillRecommendation:
+    """Tests for SkillRecommendation dataclass."""
+
+    def test_skill_recommendation_creation(self):
+        """Test creating a SkillRecommendation."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        rec = SkillRecommendation(
+            name="@modelcontextprotocol/server-filesystem",
+            description="MCP server for filesystem access",
+            source="npm",
+            install_command="npm install @modelcontextprotocol/server-filesystem",
+            stars=500,
+            last_updated="2024-01-15",
+            requires_restart=True,
+            config_location=".claude/settings.json",
+            quality_score=0.85,
+            reason="Official MCP package for file operations",
+        )
+
+        assert rec.name == "@modelcontextprotocol/server-filesystem"
+        assert rec.description == "MCP server for filesystem access"
+        assert rec.source == "npm"
+        assert rec.stars == 500
+        assert rec.last_updated == "2024-01-15"
+        assert rec.requires_restart is True
+        assert rec.config_location == ".claude/settings.json"
+        assert rec.quality_score == 0.85
+        assert "Official MCP" in rec.reason
+
+    def test_skill_recommendation_to_dict(self):
+        """Test SkillRecommendation serialization to dict."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        rec = SkillRecommendation(
+            name="test-mcp",
+            description="Test MCP server",
+            source="github",
+            install_command="git clone https://github.com/test/mcp",
+            stars=100,
+            last_updated="2024-02-01",
+            requires_restart=True,
+            config_location=".claude/settings.json",
+            quality_score=0.7,
+            reason="Test recommendation",
+        )
+
+        data = rec.to_dict()
+
+        assert data["name"] == "test-mcp"
+        assert data["description"] == "Test MCP server"
+        assert data["source"] == "github"
+        assert data["install_command"] == "git clone https://github.com/test/mcp"
+        assert data["stars"] == 100
+        assert data["last_updated"] == "2024-02-01"
+        assert data["requires_restart"] is True
+        assert data["config_location"] == ".claude/settings.json"
+        assert data["quality_score"] == 0.7
+        assert data["reason"] == "Test recommendation"
+
+    def test_skill_recommendation_github_source(self):
+        """Test SkillRecommendation with GitHub source."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        rec = SkillRecommendation(
+            name="owner/repo-mcp-server",
+            description="GitHub-hosted MCP server",
+            source="github",
+            install_command="git clone https://github.com/owner/repo-mcp-server && cd repo-mcp-server && pip install -e .",
+            stars=1500,
+            last_updated="2024-01-20",
+            requires_restart=True,
+            config_location=".claude/settings.json",
+            quality_score=0.9,
+            reason="High-star GitHub repository",
+        )
+
+        assert rec.source == "github"
+        assert "git clone" in rec.install_command
+
+
+# ============================================================================
+# Tests for SkillDiscoveryResult dataclass
+# ============================================================================
+
+
+class TestSkillDiscoveryResult:
+    """Tests for SkillDiscoveryResult dataclass."""
+
+    def test_skill_discovery_result_creation(self):
+        """Test creating a SkillDiscoveryResult."""
+        from beyond_ralph.agents.research_agent import (
+            SkillDiscoveryResult,
+            SkillRecommendation,
+        )
+
+        recommendations = [
+            SkillRecommendation(
+                name="test-skill",
+                description="Test",
+                source="npm",
+                install_command="npm install test",
+                stars=100,
+                last_updated="2024-01-01",
+                requires_restart=True,
+                config_location=".claude/settings.json",
+                quality_score=0.8,
+                reason="Test",
+            )
+        ]
+
+        result = SkillDiscoveryResult(
+            requirements=["database access", "file operations"],
+            recommendations=recommendations,
+            discovery_phase="early",
+            restart_warning=False,
+        )
+
+        assert result.requirements == ["database access", "file operations"]
+        assert len(result.recommendations) == 1
+        assert result.discovery_phase == "early"
+        assert result.restart_warning is False
+
+    def test_skill_discovery_result_to_dict(self):
+        """Test SkillDiscoveryResult serialization to dict."""
+        from beyond_ralph.agents.research_agent import (
+            SkillDiscoveryResult,
+            SkillRecommendation,
+        )
+
+        rec = SkillRecommendation(
+            name="skill",
+            description="Desc",
+            source="npm",
+            install_command="npm i",
+            stars=50,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude/settings.json",
+            quality_score=0.5,
+            reason="Test",
+        )
+
+        result = SkillDiscoveryResult(
+            requirements=["req1"],
+            recommendations=[rec],
+            discovery_phase="late",
+            restart_warning=True,
+        )
+
+        data = result.to_dict()
+
+        assert data["requirements"] == ["req1"]
+        assert len(data["recommendations"]) == 1
+        assert data["recommendations"][0]["name"] == "skill"
+        assert data["discovery_phase"] == "late"
+        assert data["restart_warning"] is True
+
+    def test_skill_discovery_result_early_phase(self):
+        """Test SkillDiscoveryResult with early phase."""
+        from beyond_ralph.agents.research_agent import SkillDiscoveryResult
+
+        result = SkillDiscoveryResult(
+            requirements=["feature"],
+            recommendations=[],
+            discovery_phase="early",
+            restart_warning=False,
+        )
+
+        assert result.discovery_phase == "early"
+        assert result.restart_warning is False
+
+    def test_skill_discovery_result_late_phase_warning(self):
+        """Test SkillDiscoveryResult with late phase sets warning."""
+        from beyond_ralph.agents.research_agent import SkillDiscoveryResult
+
+        result = SkillDiscoveryResult(
+            requirements=["feature"],
+            recommendations=[],
+            discovery_phase="late",
+            restart_warning=True,
+        )
+
+        assert result.discovery_phase == "late"
+        assert result.restart_warning is True
+
+
+# ============================================================================
+# Tests for ResearchAgent Skill Discovery Methods
+# ============================================================================
+
+
+class TestResearchAgentSkillDiscovery:
+    """Tests for ResearchAgent skill discovery functionality."""
+
+    @pytest.mark.asyncio
+    async def test_discover_skills_basic(self, tmp_path):
+        """Test basic discover_skills functionality."""
+        from beyond_ralph.agents.research_agent import SkillDiscoveryResult
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Mock the search methods
+        with patch.object(agent, "_search_github_skills", new_callable=AsyncMock) as mock_github:
+            with patch.object(agent, "_search_npm_skills", new_callable=AsyncMock) as mock_npm:
+                mock_github.return_value = []
+                mock_npm.return_value = []
+
+                result = await agent.discover_skills(["database access"], phase=1)
+
+                assert isinstance(result, SkillDiscoveryResult)
+                assert result.requirements == ["database access"]
+                assert result.discovery_phase == "early"
+                assert result.restart_warning is False
+
+    @pytest.mark.asyncio
+    async def test_discover_skills_phase_detection_early(self, tmp_path):
+        """Test discover_skills correctly identifies early phase (1-2)."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        with patch.object(agent, "_search_github_skills", new_callable=AsyncMock) as mock_github:
+            with patch.object(agent, "_search_npm_skills", new_callable=AsyncMock) as mock_npm:
+                mock_github.return_value = []
+                mock_npm.return_value = []
+
+                # Phase 1
+                result1 = await agent.discover_skills(["test"], phase=1)
+                assert result1.discovery_phase == "early"
+                assert result1.restart_warning is False
+
+                # Phase 2
+                result2 = await agent.discover_skills(["test"], phase=2)
+                assert result2.discovery_phase == "early"
+                assert result2.restart_warning is False
+
+    @pytest.mark.asyncio
+    async def test_discover_skills_phase_detection_late(self, tmp_path):
+        """Test discover_skills correctly identifies late phase (3+)."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        with patch.object(agent, "_search_github_skills", new_callable=AsyncMock) as mock_github:
+            with patch.object(agent, "_search_npm_skills", new_callable=AsyncMock) as mock_npm:
+                mock_github.return_value = []
+                mock_npm.return_value = []
+
+                # Phase 3
+                result3 = await agent.discover_skills(["test"], phase=3)
+                assert result3.discovery_phase == "late"
+                assert result3.restart_warning is True
+
+                # Phase 7
+                result7 = await agent.discover_skills(["test"], phase=7)
+                assert result7.discovery_phase == "late"
+                assert result7.restart_warning is True
+
+    @pytest.mark.asyncio
+    async def test_discover_skills_with_recommendations(self, tmp_path):
+        """Test discover_skills returns recommendations."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        mock_rec = SkillRecommendation(
+            name="test-mcp",
+            description="Test MCP server",
+            source="github",
+            install_command="git clone test",
+            stars=100,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude/settings.json",
+            quality_score=0.7,
+            reason="Test",
+        )
+
+        with patch.object(agent, "_search_github_skills", new_callable=AsyncMock) as mock_github:
+            with patch.object(agent, "_search_npm_skills", new_callable=AsyncMock) as mock_npm:
+                mock_github.return_value = [mock_rec]
+                mock_npm.return_value = []
+
+                result = await agent.discover_skills(["database"], phase=1)
+
+                assert len(result.recommendations) == 1
+                assert result.recommendations[0].name == "test-mcp"
+
+    @pytest.mark.asyncio
+    async def test_discover_skills_deduplicates(self, tmp_path):
+        """Test discover_skills removes duplicate recommendations."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Same skill from both sources
+        rec1 = SkillRecommendation(
+            name="duplicate-skill",
+            description="From GitHub",
+            source="github",
+            install_command="git clone",
+            stars=100,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude/settings.json",
+            quality_score=0.7,
+            reason="GitHub",
+        )
+        rec2 = SkillRecommendation(
+            name="duplicate-skill",  # Same name
+            description="From npm",
+            source="npm",
+            install_command="npm install",
+            stars=50,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude/settings.json",
+            quality_score=0.5,
+            reason="npm",
+        )
+
+        with patch.object(agent, "_search_github_skills", new_callable=AsyncMock) as mock_github:
+            with patch.object(agent, "_search_npm_skills", new_callable=AsyncMock) as mock_npm:
+                mock_github.return_value = [rec1]
+                mock_npm.return_value = [rec2]
+
+                result = await agent.discover_skills(["test"], phase=1)
+
+                # Should only have one (first one found)
+                assert len(result.recommendations) == 1
+                assert result.recommendations[0].name == "duplicate-skill"
+
+    @pytest.mark.asyncio
+    async def test_discover_skills_limits_results(self, tmp_path):
+        """Test discover_skills limits total recommendations."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Create many recommendations
+        recs = [
+            SkillRecommendation(
+                name=f"skill-{i}",
+                description=f"Skill {i}",
+                source="github",
+                install_command="git clone",
+                stars=100 - i,
+                last_updated="2024-01-01",
+                requires_restart=True,
+                config_location=".claude/settings.json",
+                quality_score=0.5 + (i * 0.01),
+                reason="Test",
+            )
+            for i in range(20)
+        ]
+
+        with patch.object(agent, "_search_github_skills", new_callable=AsyncMock) as mock_github:
+            with patch.object(agent, "_search_npm_skills", new_callable=AsyncMock) as mock_npm:
+                mock_github.return_value = recs
+                mock_npm.return_value = []
+
+                # Single requirement = max 3 results
+                result = await agent.discover_skills(["test"], phase=1)
+                assert len(result.recommendations) <= 3
+
+                # Multiple requirements (4) = max 10 results
+                result = await agent.discover_skills(
+                    ["test1", "test2", "test3", "test4"],
+                    phase=1,
+                )
+                assert len(result.recommendations) <= 10
+
+    @pytest.mark.asyncio
+    async def test_discover_skills_empty_requirements(self, tmp_path):
+        """Test discover_skills with empty requirements list."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        with patch.object(agent, "_search_github_skills", new_callable=AsyncMock) as mock_github:
+            with patch.object(agent, "_search_npm_skills", new_callable=AsyncMock) as mock_npm:
+                mock_github.return_value = []
+                mock_npm.return_value = []
+
+                result = await agent.discover_skills([], phase=1)
+
+                assert result.requirements == []
+                assert result.recommendations == []
+
+
+class TestResearchAgentGitHubSkillSearch:
+    """Tests for GitHub skill search functionality."""
+
+    @pytest.mark.asyncio
+    async def test_search_github_skills_success(self, tmp_path):
+        """Test successful GitHub skill search."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "items": [
+                {
+                    "full_name": "owner/mcp-server-test",
+                    "description": "A test MCP server",
+                    "stargazers_count": 500,
+                    "updated_at": "2024-01-15T10:00:00Z",
+                    "clone_url": "https://github.com/owner/mcp-server-test.git",
+                    "name": "mcp-server-test",
+                    "language": "Python",
+                }
+            ]
+        }
+
+        with patch.object(agent.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            results = await agent._search_github_skills("database")
+
+            assert len(results) > 0
+            assert results[0].source == "github"
+            assert results[0].stars == 500
+
+    @pytest.mark.asyncio
+    async def test_search_github_skills_handles_error(self, tmp_path):
+        """Test GitHub search handles API errors gracefully."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 403  # Rate limited
+
+        with patch.object(agent.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            results = await agent._search_github_skills("database")
+
+            # Should return empty list, not raise
+            assert results == []
+
+    @pytest.mark.asyncio
+    async def test_search_github_skills_handles_exception(self, tmp_path):
+        """Test GitHub search handles exceptions gracefully."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        with patch.object(agent.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = Exception("Network error")
+
+            results = await agent._search_github_skills("database")
+
+            # Should return empty list, not raise
+            assert results == []
+
+
+class TestResearchAgentNpmSkillSearch:
+    """Tests for npm skill search functionality."""
+
+    @pytest.mark.asyncio
+    async def test_search_npm_skills_success(self, tmp_path):
+        """Test successful npm skill search."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "objects": [
+                {
+                    "package": {
+                        "name": "@modelcontextprotocol/server-test",
+                        "description": "Official MCP server",
+                        "version": "1.0.0",
+                        "date": "2024-01-15T10:00:00Z",
+                    },
+                    "score": {
+                        "final": 0.8,
+                        "detail": {
+                            "popularity": 0.5,
+                        },
+                    },
+                }
+            ]
+        }
+
+        with patch.object(agent.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            results = await agent._search_npm_skills("database")
+
+            assert len(results) > 0
+            assert results[0].source == "npm"
+            assert "@modelcontextprotocol" in results[0].name
+
+    @pytest.mark.asyncio
+    async def test_search_npm_skills_handles_error(self, tmp_path):
+        """Test npm search handles API errors gracefully."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+
+        with patch.object(agent.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            results = await agent._search_npm_skills("database")
+
+            assert results == []
+
+    @pytest.mark.asyncio
+    async def test_search_npm_skills_official_package_reason(self, tmp_path):
+        """Test npm search identifies official MCP packages."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "objects": [
+                {
+                    "package": {
+                        "name": "@modelcontextprotocol/server-filesystem",
+                        "description": "Filesystem access",
+                        "version": "1.0.0",
+                        "date": "2024-01-15",
+                    },
+                    "score": {"final": 0.9, "detail": {"popularity": 0.7}},
+                }
+            ]
+        }
+
+        with patch.object(agent.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            results = await agent._search_npm_skills("filesystem")
+
+            assert len(results) > 0
+            assert "Official MCP" in results[0].reason
+
+
+class TestResearchAgentSkillQualityEvaluation:
+    """Tests for skill quality evaluation."""
+
+    def test_evaluate_skill_quality_high_stars(self, tmp_path):
+        """Test quality score for high-star repositories."""
+        from datetime import datetime, timedelta
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Use a recent date to ensure high recency score
+        recent_date = (datetime.now() - timedelta(days=15)).isoformat()
+
+        quality = agent._evaluate_skill_quality(
+            {
+                "stars": 1500,
+                "updated_at": recent_date,
+                "has_readme": True,
+                "source": "github",
+            }
+        )
+
+        # High stars (0.3) + recent update (0.3) + readme (0.15) + github (0.1) = 0.85
+        assert quality >= 0.7
+
+    def test_evaluate_skill_quality_low_stars(self, tmp_path):
+        """Test quality score for low-star repositories."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        quality = agent._evaluate_skill_quality(
+            {
+                "stars": 5,
+                "updated_at": "2022-01-15T10:00:00Z",  # Old
+                "has_readme": False,
+                "source": "github",
+            }
+        )
+
+        # Low stars + old + no docs = low quality
+        assert quality < 0.3
+
+    def test_evaluate_skill_quality_recent_update_boost(self, tmp_path):
+        """Test that recent updates boost quality score."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Use a recent date
+        from datetime import datetime, timedelta
+
+        recent_date = (datetime.now() - timedelta(days=15)).isoformat()
+
+        quality = agent._evaluate_skill_quality(
+            {
+                "stars": 50,
+                "updated_at": recent_date,
+                "has_readme": True,
+                "source": "github",
+            }
+        )
+
+        # Recent update should give good score
+        assert quality >= 0.5
+
+    def test_evaluate_skill_quality_npm_score_component(self, tmp_path):
+        """Test that npm score affects quality."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        quality_high_npm = agent._evaluate_skill_quality(
+            {
+                "stars": 100,
+                "updated_at": "2024-01-15T10:00:00Z",
+                "source": "npm",
+                "npm_score": 0.9,
+            }
+        )
+
+        quality_low_npm = agent._evaluate_skill_quality(
+            {
+                "stars": 100,
+                "updated_at": "2024-01-15T10:00:00Z",
+                "source": "npm",
+                "npm_score": 0.1,
+            }
+        )
+
+        assert quality_high_npm > quality_low_npm
+
+    def test_evaluate_skill_quality_bounds(self, tmp_path):
+        """Test that quality score is always between 0 and 1."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Maximum quality
+        from datetime import datetime
+
+        now = datetime.now().isoformat()
+
+        max_quality = agent._evaluate_skill_quality(
+            {
+                "stars": 10000,
+                "updated_at": now,
+                "has_readme": True,
+                "has_docs": True,
+                "source": "npm",
+                "npm_score": 1.0,
+            }
+        )
+
+        assert 0.0 <= max_quality <= 1.0
+
+        # Minimum quality
+        min_quality = agent._evaluate_skill_quality(
+            {
+                "stars": 0,
+                "updated_at": "",
+                "has_readme": False,
+                "source": "unknown",
+            }
+        )
+
+        assert 0.0 <= min_quality <= 1.0
+
+
+class TestResearchAgentSkillRanking:
+    """Tests for skill ranking functionality."""
+
+    def test_rank_skills_by_quality(self, tmp_path):
+        """Test that skills are ranked by quality score."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        skills = [
+            SkillRecommendation(
+                name="low-quality",
+                description="Low",
+                source="github",
+                install_command="",
+                stars=10,
+                last_updated="",
+                requires_restart=True,
+                config_location="",
+                quality_score=0.3,
+                reason="",
+            ),
+            SkillRecommendation(
+                name="high-quality",
+                description="High",
+                source="github",
+                install_command="",
+                stars=1000,
+                last_updated="",
+                requires_restart=True,
+                config_location="",
+                quality_score=0.9,
+                reason="",
+            ),
+            SkillRecommendation(
+                name="medium-quality",
+                description="Medium",
+                source="github",
+                install_command="",
+                stars=100,
+                last_updated="",
+                requires_restart=True,
+                config_location="",
+                quality_score=0.6,
+                reason="",
+            ),
+        ]
+
+        ranked = agent._rank_skills(skills)
+
+        assert ranked[0].name == "high-quality"
+        assert ranked[1].name == "medium-quality"
+        assert ranked[2].name == "low-quality"
+
+    def test_rank_skills_tiebreaker_by_stars(self, tmp_path):
+        """Test that stars are used as tiebreaker."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        skills = [
+            SkillRecommendation(
+                name="less-stars",
+                description="",
+                source="github",
+                install_command="",
+                stars=50,
+                last_updated="",
+                requires_restart=True,
+                config_location="",
+                quality_score=0.7,
+                reason="",
+            ),
+            SkillRecommendation(
+                name="more-stars",
+                description="",
+                source="github",
+                install_command="",
+                stars=500,
+                last_updated="",
+                requires_restart=True,
+                config_location="",
+                quality_score=0.7,  # Same quality
+                reason="",
+            ),
+        ]
+
+        ranked = agent._rank_skills(skills)
+
+        assert ranked[0].name == "more-stars"
+        assert ranked[1].name == "less-stars"
+
+    def test_rank_skills_empty_list(self, tmp_path):
+        """Test ranking empty list."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        ranked = agent._rank_skills([])
+
+        assert ranked == []
+
+
+class TestResearchAgentSkillDiscoveryStorage:
+    """Tests for skill discovery storage."""
+
+    @pytest.mark.asyncio
+    async def test_store_skill_discovery(self, tmp_path):
+        """Test storing skill discovery results."""
+        from beyond_ralph.agents.research_agent import (
+            SkillDiscoveryResult,
+            SkillRecommendation,
+        )
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="test-skill",
+            description="Test skill",
+            source="npm",
+            install_command="npm install test",
+            stars=100,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude/settings.json",
+            quality_score=0.8,
+            reason="Test reason",
+        )
+
+        result = SkillDiscoveryResult(
+            requirements=["database access"],
+            recommendations=[rec],
+            discovery_phase="early",
+            restart_warning=False,
+        )
+
+        with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+            mock_write.return_value = "uuid"
+
+            path = await agent._store_skill_discovery(result)
+
+            assert "skill-discovery" in path
+            mock_write.assert_called_once()
+            call_kwargs = mock_write.call_args.kwargs
+            assert call_kwargs["category"] == "research"
+            assert "skill-discovery" in call_kwargs["tags"]
+
+    @pytest.mark.asyncio
+    async def test_store_skill_discovery_handles_error(self, tmp_path):
+        """Test storage handles errors gracefully."""
+        from beyond_ralph.agents.research_agent import SkillDiscoveryResult
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        result = SkillDiscoveryResult(
+            requirements=["test"],
+            recommendations=[],
+            discovery_phase="early",
+            restart_warning=False,
+        )
+
+        with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+            mock_write.side_effect = Exception("Write failed")
+
+            path = await agent._store_skill_discovery(result)
+
+            assert path == ""
+
+    @pytest.mark.asyncio
+    async def test_store_skill_discovery_empty_requirements(self, tmp_path):
+        """Test storage with empty requirements uses default filename."""
+        from beyond_ralph.agents.research_agent import SkillDiscoveryResult
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        result = SkillDiscoveryResult(
+            requirements=[],
+            recommendations=[],
+            discovery_phase="early",
+            restart_warning=False,
+        )
+
+        with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+            mock_write.return_value = "uuid"
+
+            path = await agent._store_skill_discovery(result)
+
+            assert "skill-discovery-general" in path
+
+
+# ============================================================================
+# Tests for SkillInstallResult dataclass
+# ============================================================================
+
+
+class TestSkillInstallResult:
+    """Tests for SkillInstallResult dataclass."""
+
+    def test_skill_install_result_creation(self):
+        """Test creating a SkillInstallResult."""
+        from beyond_ralph.agents.research_agent import SkillInstallResult
+
+        result = SkillInstallResult(
+            skill_name="@modelcontextprotocol/server-test",
+            success=True,
+            install_method="npm",
+            config_updated=True,
+            config_path="/home/user/.claude.json",
+            error_message=None,
+            requires_restart=True,
+            verification_status="verified",
+        )
+
+        assert result.skill_name == "@modelcontextprotocol/server-test"
+        assert result.success is True
+        assert result.install_method == "npm"
+        assert result.config_updated is True
+        assert result.config_path == "/home/user/.claude.json"
+        assert result.error_message is None
+        assert result.requires_restart is True
+        assert result.verification_status == "verified"
+
+    def test_skill_install_result_failure(self):
+        """Test SkillInstallResult for failed installation."""
+        from beyond_ralph.agents.research_agent import SkillInstallResult
+
+        result = SkillInstallResult(
+            skill_name="failing-skill",
+            success=False,
+            install_method="git",
+            config_updated=False,
+            config_path="",
+            error_message="Git clone failed: network error",
+            requires_restart=True,
+            verification_status="failed",
+        )
+
+        assert result.success is False
+        assert result.config_updated is False
+        assert result.error_message == "Git clone failed: network error"
+        assert result.verification_status == "failed"
+
+    def test_skill_install_result_to_dict(self):
+        """Test SkillInstallResult serialization to dict."""
+        from beyond_ralph.agents.research_agent import SkillInstallResult
+
+        result = SkillInstallResult(
+            skill_name="test-skill",
+            success=True,
+            install_method="copy",
+            config_updated=True,
+            config_path="/path/to/config",
+            error_message=None,
+            requires_restart=False,
+            verification_status="verified",
+        )
+
+        data = result.to_dict()
+
+        assert data["skill_name"] == "test-skill"
+        assert data["success"] is True
+        assert data["install_method"] == "copy"
+        assert data["config_updated"] is True
+        assert data["config_path"] == "/path/to/config"
+        assert data["error_message"] is None
+        assert data["requires_restart"] is False
+        assert data["verification_status"] == "verified"
+
+    def test_skill_install_result_pending_verification(self):
+        """Test SkillInstallResult with pending verification status."""
+        from beyond_ralph.agents.research_agent import SkillInstallResult
+
+        result = SkillInstallResult(
+            skill_name="new-mcp",
+            success=True,
+            install_method="npm",
+            config_updated=True,
+            config_path="/home/.claude.json",
+            error_message=None,
+            requires_restart=True,
+            verification_status="pending",  # May work after restart
+        )
+
+        assert result.verification_status == "pending"
+        assert result.requires_restart is True
+
+
+# ============================================================================
+# Tests for ResearchAgent Skill Installation Methods
+# ============================================================================
+
+
+class TestResearchAgentInstallSkill:
+    """Tests for ResearchAgent.install_skill method."""
+
+    @pytest.mark.asyncio
+    async def test_install_skill_npm_route(self, tmp_path):
+        """Test install_skill routes to npm installer for npm source."""
+        from beyond_ralph.agents.research_agent import (
+            SkillInstallResult,
+            SkillRecommendation,
+        )
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="@modelcontextprotocol/server-test",
+            description="Test MCP server",
+            source="npm",
+            install_command="npm install @modelcontextprotocol/server-test",
+            stars=100,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude.json",
+            quality_score=0.8,
+            reason="Test",
+        )
+
+        mock_result = SkillInstallResult(
+            skill_name=rec.name,
+            success=True,
+            install_method="npm",
+            config_updated=True,
+            config_path=str(tmp_path / ".claude.json"),
+            error_message=None,
+            requires_restart=True,
+            verification_status="verified",
+        )
+
+        with patch.object(agent, "_install_npm_skill", new_callable=AsyncMock) as mock_install:
+            mock_install.return_value = mock_result
+
+            result = await agent.install_skill(rec)
+
+            mock_install.assert_called_once_with(rec)
+            assert result.install_method == "npm"
+
+    @pytest.mark.asyncio
+    async def test_install_skill_github_route(self, tmp_path):
+        """Test install_skill routes to github installer for github source."""
+        from beyond_ralph.agents.research_agent import (
+            SkillInstallResult,
+            SkillRecommendation,
+        )
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="owner/repo-mcp",
+            description="GitHub MCP server",
+            source="github",
+            install_command="git clone https://github.com/owner/repo-mcp.git",
+            stars=500,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude.json",
+            quality_score=0.9,
+            reason="High star count",
+        )
+
+        mock_result = SkillInstallResult(
+            skill_name=rec.name,
+            success=True,
+            install_method="git",
+            config_updated=True,
+            config_path=str(tmp_path / ".claude.json"),
+            error_message=None,
+            requires_restart=True,
+            verification_status="pending",
+        )
+
+        with patch.object(agent, "_install_github_skill", new_callable=AsyncMock) as mock_install:
+            mock_install.return_value = mock_result
+
+            result = await agent.install_skill(rec)
+
+            mock_install.assert_called_once_with(rec)
+            assert result.install_method == "git"
+
+    @pytest.mark.asyncio
+    async def test_install_skill_copy_route(self, tmp_path):
+        """Test install_skill routes to copy installer for other sources."""
+        from beyond_ralph.agents.research_agent import (
+            SkillInstallResult,
+            SkillRecommendation,
+        )
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="custom-skill",
+            description="Custom skill file",
+            source="local",  # Not npm or github
+            install_command="/path/to/skill.md",
+            stars=0,
+            last_updated="2024-01-01",
+            requires_restart=False,
+            config_location=".claude/commands/",
+            quality_score=0.5,
+            reason="Local skill",
+        )
+
+        mock_result = SkillInstallResult(
+            skill_name=rec.name,
+            success=True,
+            install_method="copy",
+            config_updated=True,
+            config_path=str(Path.home() / ".claude" / "commands" / "custom-skill.md"),
+            error_message=None,
+            requires_restart=False,
+            verification_status="verified",
+        )
+
+        with patch.object(agent, "_install_skill_file", new_callable=AsyncMock) as mock_install:
+            mock_install.return_value = mock_result
+
+            result = await agent.install_skill(rec)
+
+            mock_install.assert_called_once_with(rec)
+            assert result.install_method == "copy"
+
+    @pytest.mark.asyncio
+    async def test_install_skill_exception_handling(self, tmp_path):
+        """Test install_skill handles unexpected exceptions."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="failing-skill",
+            description="Will fail",
+            source="npm",
+            install_command="npm install failing",
+            stars=0,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude.json",
+            quality_score=0.1,
+            reason="Test",
+        )
+
+        with patch.object(agent, "_install_npm_skill", new_callable=AsyncMock) as mock_install:
+            mock_install.side_effect = Exception("Unexpected error")
+
+            result = await agent.install_skill(rec)
+
+            assert result.success is False
+            assert result.install_method == "unknown"
+            assert "Unexpected error" in (result.error_message or "")
+            assert result.verification_status == "failed"
+
+
+class TestResearchAgentInstallNpmSkill:
+    """Tests for ResearchAgent._install_npm_skill method."""
+
+    @pytest.mark.asyncio
+    async def test_install_npm_skill_success(self, tmp_path):
+        """Test successful npm skill installation."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="@modelcontextprotocol/server-test",
+            description="Test MCP",
+            source="npm",
+            install_command="npm install @modelcontextprotocol/server-test",
+            stars=100,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude.json",
+            quality_score=0.8,
+            reason="Test",
+        )
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+
+            with patch.object(
+                agent, "_update_claude_config", new_callable=AsyncMock
+            ) as mock_config:
+                mock_config.return_value = str(tmp_path / ".claude.json")
+
+                with patch.object(
+                    agent, "_verify_skill_installed_mcp", new_callable=AsyncMock
+                ) as mock_verify:
+                    mock_verify.return_value = True
+
+                    with patch.object(
+                        agent, "_document_skill_installation", new_callable=AsyncMock
+                    ):
+                        result = await agent._install_npm_skill(rec)
+
+                        assert result.success is True
+                        assert result.install_method == "npm"
+                        assert result.config_updated is True
+                        assert result.verification_status == "verified"
+                        mock_run.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_install_npm_skill_npm_failure(self, tmp_path):
+        """Test npm install failure."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="failing-package",
+            description="Fails",
+            source="npm",
+            install_command="npm install failing-package",
+            stars=0,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude.json",
+            quality_score=0.1,
+            reason="Test",
+        )
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stderr="npm ERR! 404 Not Found")
+
+            result = await agent._install_npm_skill(rec)
+
+            assert result.success is False
+            assert "npm install failed" in (result.error_message or "")
+            assert result.verification_status == "failed"
+
+    @pytest.mark.asyncio
+    async def test_install_npm_skill_timeout(self, tmp_path):
+        """Test npm install timeout."""
+        import subprocess
+
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="slow-package",
+            description="Slow",
+            source="npm",
+            install_command="npm install slow-package",
+            stars=0,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude.json",
+            quality_score=0.1,
+            reason="Test",
+        )
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired("npm", 300)
+
+            result = await agent._install_npm_skill(rec)
+
+            assert result.success is False
+            assert "timed out" in (result.error_message or "")
+
+
+class TestResearchAgentInstallGitHubSkill:
+    """Tests for ResearchAgent._install_github_skill method."""
+
+    @pytest.mark.asyncio
+    async def test_install_github_skill_success(self, tmp_path):
+        """Test successful GitHub skill installation."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="owner/mcp-repo",
+            description="GitHub MCP",
+            source="github",
+            install_command="git clone https://github.com/owner/mcp-repo.git && cd mcp-repo && pip install -e .",
+            stars=500,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude.json",
+            quality_score=0.9,
+            reason="Test",
+        )
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+
+            with patch.object(
+                agent, "_update_claude_config", new_callable=AsyncMock
+            ) as mock_config:
+                mock_config.return_value = str(tmp_path / ".claude.json")
+
+                with patch.object(
+                    agent, "_verify_skill_installed_mcp", new_callable=AsyncMock
+                ) as mock_verify:
+                    mock_verify.return_value = False  # Not verified until restart
+
+                    with patch.object(
+                        agent, "_document_skill_installation", new_callable=AsyncMock
+                    ):
+                        result = await agent._install_github_skill(rec)
+
+                        assert result.success is True
+                        assert result.install_method == "git"
+                        # Should call git clone, cd, pip install
+                        assert mock_run.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_install_github_skill_clone_failure(self, tmp_path):
+        """Test git clone failure."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="owner/failing-repo",
+            description="Fails to clone",
+            source="github",
+            install_command="git clone https://github.com/owner/failing-repo.git",
+            stars=0,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude.json",
+            quality_score=0.1,
+            reason="Test",
+        )
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=128, stderr="fatal: repository not found")
+
+            result = await agent._install_github_skill(rec)
+
+            assert result.success is False
+            assert "failed" in (result.error_message or "").lower()
+
+
+class TestResearchAgentInstallSkillFile:
+    """Tests for ResearchAgent._install_skill_file method."""
+
+    @pytest.mark.asyncio
+    async def test_install_skill_file_from_description(self, tmp_path):
+        """Test creating skill file from description when no source."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="custom-skill",
+            description="A custom skill for testing",
+            source="custom",
+            install_command="nonexistent-path",  # Doesn't exist
+            stars=0,
+            last_updated="2024-01-01",
+            requires_restart=False,
+            config_location=".claude/commands/",
+            quality_score=0.5,
+            reason="Custom skill creation",
+        )
+
+        with patch.object(agent, "_document_skill_installation", new_callable=AsyncMock):
+            result = await agent._install_skill_file(rec)
+
+            assert result.success is True
+            assert result.install_method == "copy"
+            assert result.requires_restart is False  # Skill files don't need restart
+            assert "custom-skill" in (result.config_path or "")
+
+    @pytest.mark.asyncio
+    async def test_install_skill_file_from_url(self, tmp_path):
+        """Test downloading skill file from URL."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="remote-skill",
+            description="Downloaded skill",
+            source="url",
+            install_command="https://example.com/skill.md",
+            stars=0,
+            last_updated="2024-01-01",
+            requires_restart=False,
+            config_location=".claude/commands/",
+            quality_score=0.5,
+            reason="Downloaded",
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "# Skill Content\nTest skill file"
+
+        with patch.object(agent.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+
+            with patch.object(agent, "_document_skill_installation", new_callable=AsyncMock):
+                result = await agent._install_skill_file(rec)
+
+                assert result.success is True
+                assert result.config_updated is True
+
+
+class TestResearchAgentUpdateClaudeConfig:
+    """Tests for ResearchAgent._update_claude_config method."""
+
+    @pytest.mark.asyncio
+    async def test_update_config_creates_new_file(self, tmp_path):
+        """Test creating new config file when none exists."""
+        import json
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        config = {
+            "command": "npx",
+            "args": ["@modelcontextprotocol/server-test"],
+            "env": {},
+        }
+
+        path = await agent._update_claude_config("test-mcp", config)
+
+        # Verify file was created
+        config_path = Path(path)
+        assert config_path.exists()
+
+        # Verify content
+        content = json.loads(config_path.read_text())
+        assert "mcpServers" in content
+        assert "test-mcp" in content["mcpServers"]
+
+    @pytest.mark.asyncio
+    async def test_update_config_merges_with_existing(self, tmp_path):
+        """Test merging with existing config file."""
+        import json
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Create existing config
+        config_path = tmp_path / ".claude.json"
+        existing = {
+            "mcpServers": {
+                "existing-mcp": {"command": "existing", "args": [], "env": {}},
+            },
+            "otherSetting": "preserved",
+        }
+        config_path.write_text(json.dumps(existing))
+
+        # Add new MCP
+        new_config = {
+            "command": "npx",
+            "args": ["new-mcp"],
+            "env": {},
+        }
+
+        path = await agent._update_claude_config("new-mcp", new_config)
+
+        # Verify merged content
+        content = json.loads(Path(path).read_text())
+        assert "existing-mcp" in content["mcpServers"]  # Preserved
+        assert "new-mcp" in content["mcpServers"]  # Added
+        assert content["otherSetting"] == "preserved"  # Other settings preserved
+
+    @pytest.mark.asyncio
+    async def test_update_config_sanitizes_skill_name(self, tmp_path):
+        """Test that skill names are sanitized for config keys."""
+        import json
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Create an empty project-local config first to avoid using global config
+        project_config = tmp_path / ".claude.json"
+        project_config.write_text("{}")
+
+        config = {"command": "test", "args": [], "env": {}}
+
+        path = await agent._update_claude_config(
+            "@modelcontextprotocol/server-filesystem",  # Contains @ and /
+            config,
+        )
+
+        content = json.loads(Path(path).read_text())
+        # Key should be sanitized (no @ or /)
+        keys = list(content["mcpServers"].keys())
+        assert len(keys) == 1
+        # The sanitized key should not contain @ or /
+        sanitized_key = keys[0]
+        assert "@" not in sanitized_key
+        assert "/" not in sanitized_key
+        # Should contain something from the original name
+        assert "modelcontextprotocol" in sanitized_key or "server-filesystem" in sanitized_key
+
+
+class TestResearchAgentVerifySkillInstalled:
+    """Tests for ResearchAgent._verify_skill_installed_mcp method."""
+
+    @pytest.mark.asyncio
+    async def test_verify_skill_found_in_config(self, tmp_path):
+        """Test verifying skill when it exists in config."""
+        import json
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Create config with the skill
+        config_path = tmp_path / ".claude.json"
+        config = {
+            "mcpServers": {
+                "test-mcp": {"command": "test", "args": [], "env": {}},
+            }
+        }
+        config_path.write_text(json.dumps(config))
+
+        result = await agent._verify_skill_installed_mcp("test-mcp")
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_verify_skill_not_found_in_config(self, tmp_path):
+        """Test verifying skill when it doesn't exist in config."""
+        import json
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        # Create config without the skill
+        config_path = tmp_path / ".claude.json"
+        config = {"mcpServers": {}}
+        config_path.write_text(json.dumps(config))
+
+        result = await agent._verify_skill_installed_mcp("nonexistent-mcp")
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_verify_skill_no_config_file(self, tmp_path):
+        """Test verifying skill when no config file exists."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        result = await agent._verify_skill_installed_mcp("any-mcp")
+
+        assert result is False
+
+
+class TestResearchAgentExtractRepoName:
+    """Tests for ResearchAgent._extract_repo_name method."""
+
+    def test_extract_repo_name_https(self, tmp_path):
+        """Test extracting repo name from HTTPS URL."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        cmd = "git clone https://github.com/owner/mcp-server.git"
+        name = agent._extract_repo_name(cmd)
+
+        assert name == "mcp-server"
+
+    def test_extract_repo_name_https_no_git(self, tmp_path):
+        """Test extracting repo name from HTTPS URL without .git suffix."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        cmd = "git clone https://github.com/owner/mcp-server"
+        name = agent._extract_repo_name(cmd)
+
+        assert name == "mcp-server"
+
+    def test_extract_repo_name_with_cd(self, tmp_path):
+        """Test extracting repo name from command with cd."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        cmd = "git clone https://github.com/owner/repo.git && cd repo && pip install -e ."
+        name = agent._extract_repo_name(cmd)
+
+        assert name == "repo"
+
+    def test_extract_repo_name_fallback(self, tmp_path):
+        """Test fallback when pattern doesn't match."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        cmd = "some random command"
+        name = agent._extract_repo_name(cmd)
+
+        assert name == "mcp-server"  # Default fallback
+
+
+class TestResearchAgentDocumentSkillInstallation:
+    """Tests for ResearchAgent._document_skill_installation method."""
+
+    @pytest.mark.asyncio
+    async def test_document_skill_installation(self, tmp_path):
+        """Test documenting skill installation."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="documented-skill",
+            description="Test documentation",
+            source="npm",
+            install_command="npm install documented-skill",
+            stars=100,
+            last_updated="2024-01-15",
+            requires_restart=True,
+            config_location=".claude.json",
+            quality_score=0.8,
+            reason="For testing documentation",
+        )
+
+        with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+            await agent._document_skill_installation(rec, "npm", "/path/to/config")
+
+            mock_write.assert_called_once()
+            call_kwargs = mock_write.call_args.kwargs
+            assert "documented-skill" in call_kwargs["title"]
+            assert "skill-installation" in call_kwargs["tags"]
+            assert "npm" in call_kwargs["tags"]
+
+    @pytest.mark.asyncio
+    async def test_document_skill_installation_handles_error(self, tmp_path):
+        """Test that documentation errors don't fail installation."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="test-skill",
+            description="Test",
+            source="npm",
+            install_command="npm install test",
+            stars=0,
+            last_updated="2024-01-01",
+            requires_restart=True,
+            config_location=".claude.json",
+            quality_score=0.5,
+            reason="Test",
+        )
+
+        with patch.object(agent, "write_knowledge", new_callable=AsyncMock) as mock_write:
+            mock_write.side_effect = Exception("Write failed")
+
+            # Should not raise
+            await agent._document_skill_installation(rec, "npm", "/path")
+
+
+class TestResearchAgentSkillTracking:
+    """Tests for skill tracking functionality."""
+
+    def test_installed_skills_tracking_list(self, tmp_path):
+        """Test that agent has installed_skills tracking list."""
+        agent = ResearchAgent(project_root=tmp_path)
+
+        assert hasattr(agent, "installed_skills")
+        assert isinstance(agent.installed_skills, list)
+        assert len(agent.installed_skills) == 0
+
+    @pytest.mark.asyncio
+    async def test_skill_added_to_tracking_on_install(self, tmp_path):
+        """Test that successfully installed skills are tracked."""
+        from beyond_ralph.agents.research_agent import SkillRecommendation
+
+        agent = ResearchAgent(project_root=tmp_path)
+
+        rec = SkillRecommendation(
+            name="tracked-skill",
+            description="Should be tracked",
+            source="custom",
+            install_command="nonexistent",  # Will create from description
+            stars=0,
+            last_updated="2024-01-01",
+            requires_restart=False,
+            config_location=".claude/commands/",
+            quality_score=0.5,
+            reason="Test tracking",
+        )
+
+        with patch.object(agent, "_document_skill_installation", new_callable=AsyncMock):
+            result = await agent._install_skill_file(rec)
+
+            assert result.success is True
+            assert "tracked-skill" in agent.installed_skills
