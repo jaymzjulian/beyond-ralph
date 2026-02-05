@@ -169,6 +169,48 @@ def quota() -> None:
 
 
 @app.command()
+def install(
+    target: str = typer.Argument(..., help="Target project directory"),
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing files"),
+    minimal: bool = typer.Option(False, "--minimal", help="Only install Beyond Ralph basics"),
+    no_superclaude: bool = typer.Option(
+        False, "--no-superclaude", help="Skip SuperClaude commands and skills"
+    ),
+    no_mcp: bool = typer.Option(False, "--no-mcp", help="Skip MCP server configuration"),
+    install_mcp_packages: bool = typer.Option(
+        False, "--install-mcp-packages", help="Actually install MCP packages via npm"
+    ),
+    allow_free_tier_with_key: bool = typer.Option(
+        False, "--allow-free-tier-with-key",
+        help="Include MCP servers with free tiers that require API keys (Brave, Tavily, GitHub, Sentry)"
+    ),
+) -> None:
+    """Install Beyond Ralph development environment into a target project.
+
+    This installs:
+    - Beyond Ralph commands (/beyond-ralph, /beyond-ralph-resume, /beyond-ralph-status)
+    - Stop hooks for autonomous operation
+    - SuperClaude commands (/sc:analyze, /sc:research, /sc:test, etc.)
+    - Useful development skills (confidence-check, task-classifier, etc.)
+    - MCP server configurations (no API key: context7, sequential-thinking, playwright, etc.)
+
+    Use --minimal for just Beyond Ralph basics.
+    Use --allow-free-tier-with-key to include servers like Brave Search, Tavily, GitHub API.
+    """
+    from beyond_ralph.installer import install_to_project
+
+    install_to_project(
+        target=target,
+        force=force,
+        include_superclaude=not no_superclaude,
+        include_mcp=not no_mcp,
+        install_mcp_packages=install_mcp_packages,
+        minimal=minimal,
+        allow_free_tier_with_key=allow_free_tier_with_key,
+    )
+
+
+@app.command()
 def info() -> None:
     """Show system information and capabilities."""
     from beyond_ralph.utils.system import get_extended_capabilities
@@ -197,6 +239,12 @@ def info() -> None:
 def main() -> None:
     """Main entry point."""
     app()
+
+
+def install_cli() -> None:
+    """Entry point for br-install command."""
+    from beyond_ralph.installer import main as installer_main
+    installer_main()
 
 
 if __name__ == "__main__":

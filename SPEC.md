@@ -99,9 +99,91 @@ This requires a couple of things from the user:
        * If the app is generating graphical output, AND there is a way to have it output to either png or video files, that is preferenable, since claude can aanlyse those more directly
        * If the app is generating a functional GUI, it should be possible to use something liek Xvnc or RDP to access the system and watch it run!
 
+    * For Android app testing (REQUIRED):
+       * Beyond Ralph MUST be able to test Android applications via Appium (preferred testing framework)
+       * Environment auto-detection: Automatically detect if running on WSL, native Linux, or macOS
+       * On native Linux/macOS: Use local Android emulator and ADB directly
+       * On WSL2: Connect to Windows host ADB using one of these methods (in order of preference):
+         1. **SSH-based ADB** (RECOMMENDED): Run ADB commands on Windows host via SSH
+            * Most reliable approach - bypasses Windows firewall issues entirely
+            * Requires: SSH server on Windows (OpenSSH), user SSH key authentication
+            * Pattern: `ssh <windows_host> "C:\Android\platform-tools\adb.exe <command>"`
+            * Example: `ssh 192.168.68.138 "C:\Android\platform-tools\adb.exe devices"`
+            * Works even when direct network ports are blocked by Windows Firewall
+            * Can also use SSH tunneling for port forwarding if needed
+         2. **Direct network ADB**: Use WSL2 mirrored networking to access Windows host ADB port 5037
+            * Requires: Windows Firewall rule allowing inbound TCP port 5037
+            * ADB server must be started with `-a` flag to listen on all interfaces
+            * May fail silently if firewall blocks the connection
+         * During the interview phase:
+            * ASK the user for Windows host IP address
+            * ASK if SSH access is available to the Windows host
+            * Test connectivity using the preferred method before proceeding
+            * If SSH works, use SSH-based ADB; otherwise fall back to direct network
+         * If Android testing is needed but no Windows host is configured: BLOCK and request configuration (do not skip silently)
+       * The interview phase MUST ask about Android testing requirements and Windows host details if applicable
+
     * If the app needs to interact with _any other resources_, those resources MUST be provided by the user up front!
        * The first thing claude should do with this, is check that _everyhting_ it needs is available - this should ne a part of the inteview process described above!!!
        * The user can opt to allow claude to autonomously install thigns on the system - if the user agrees to this, the agents should fetch and preapre their own deependencies!!!
+
+Remote Access (REQUIRED)
+------------------------
+Remote access is a REQUIRED capability, not optional. It enables:
+  * VNC/RDP access for watching GUI applications run
+  * Headless display support via Xvfb, Xvnc
+  * noVNC for browser-based remote access
+  * WSL2 integration with Windows host for Android testing via ADB:
+    - SSH-based ADB (preferred): Run ADB commands via SSH to Windows host
+    - Direct network ADB (fallback): Connect to Windows ADB port via mirrored networking
+    - SSH is more reliable as it bypasses firewall issues
+
+Code Review - Language Support
+------------------------------
+The code review agent MUST support linting and security scanning for these languages:
+  * Python (ruff, mypy, bandit)
+  * JavaScript (eslint)
+  * TypeScript (tsc, eslint)
+  * Go (staticcheck, go vet)
+  * Rust (cargo clippy)
+  * Java (checkstyle)
+  * C/C++ (clang-tidy, cppcheck)
+  * Kotlin (ktlint, detekt) - REQUIRED for Android development
+  * Ruby (rubocop)
+  * Swift (swiftlint)
+
+Each language should have fallback linters if the primary tool is unavailable.
+
+Web Research and Skill Discovery (REQUIRED)
+-------------------------------------------
+Beyond Ralph MUST be able to autonomously research and discover capabilities:
+
+  * Web Research for Implementation:
+    - When agents don't know how to implement something, they MUST use web search
+    - Search for tutorials, documentation, Stack Overflow answers, GitHub examples
+    - Synthesize findings into actionable implementation plans
+    - Store research in knowledge base for future reference
+
+  * Proactive Skill/MCP Discovery:
+    - During Phase 1-2 (spec ingestion and interview), analyze what capabilities are needed
+    - Search for existing Claude Code skills/MCPs that could help (e.g., database MCPs, API MCPs)
+    - Search GitHub, npm, and other registries for relevant skills
+    - Present skill recommendations to user during interview phase
+    - WARN user that installing skills may require Claude restart
+    - If skill is needed mid-implementation: search, recommend, but ASK before installing (restart required)
+
+  * Skill Installation Flow:
+    - Early discovery (Phase 1-2): Install skills proactively, warn about restart
+    - Late discovery (Phase 7+): Ask user if they want to install (will interrupt flow)
+    - Document all installed skills in knowledge base
+    - Verify skill registration after restart
+
+  * Research Agent Responsibilities:
+    - Use WebSearch tool for implementation research
+    - Use WebFetch to read documentation pages
+    - Evaluate multiple sources before recommending approaches
+    - Prefer official documentation over blog posts
+    - Store research findings with source URLs
 
 Documenation
 ------------
@@ -111,7 +193,101 @@ Claude Quotas
 -------------
 It is VITAL that the plugin loop detect when claude is at or near a usage limit - .  Bundle this!  When the usage level hits the threshold of 85% for EITHER the current session, OR the weekly quoate, all agents should pause new requests until the quota is reset - check it every 10 minbutes in that case.  Check it before each agent interaction - store the current state in a file everyone can read, and cache it.  one way you could potentially do this is run "claude /usage", and then after it displays the usage, sent it escape, followed by /quit, to exit.  you should make a small python script that does this!!!
 
-BNote that it should NOT stop being autonomous at this time, just PAUSE.
+Note that it should NOT stop being autonomous at this time, just PAUSE.
+
+Resume Command Behavior (REQUIRED)
+----------------------------------
+The `/beyond-ralph-resume` command MUST NOT blindly trust the state file. It MUST:
+
+  * Always re-read and validate the SPEC.md against the stored hash
+  * If spec has changed:
+    - Identify NEW requirements added to the spec
+    - Identify REMOVED requirements no longer in spec
+    - Identify MODIFIED requirements that may need re-validation
+    - Update the project plan accordingly
+    - Schedule new tasks for new requirements
+    - Mark affected modules for re-validation
+
+  * Validate the project plan against the spec:
+    - Every MUST/REQUIRED in spec has a corresponding task
+    - All claimed completions are actually implemented
+    - Tests actually exist and pass for "tested" items
+
+  * The state file records progress, but the SPEC is the source of truth
+  * A project is only truly "complete" when ALL current spec requirements are met
+  * Spec changes automatically un-complete the project until addressed
+
+Project Installation (REQUIRED)
+-------------------------------
+Beyond Ralph MUST include a comprehensive installer that sets up projects for success:
+
+  * `beyond-ralph install <project-path>` - Full development environment setup
+
+  * The installer MUST install:
+    - Beyond Ralph commands (/beyond-ralph, /beyond-ralph-resume, /beyond-ralph-status)
+    - Stop hooks for autonomous operation
+    - SuperClaude commands (no API keys required):
+      * /sc:analyze - Code analysis
+      * /sc:research - Deep web research
+      * /sc:troubleshoot - Debugging assistance
+      * /sc:test - Testing workflows
+      * /sc:improve - Code improvement
+      * /sc:implement - Implementation guidance
+      * /sc:design - Architecture design
+      * /sc:explain - Code explanations
+      * /sc:cleanup - Dead code removal
+      * /sc:git - Git operations
+      * /sc:build - Build automation
+      * /sc:document - Documentation generation
+      * /sc:estimate - Effort estimation
+      * /sc:task - Task management
+      * /sc:workflow - Workflow generation
+    - Additional useful commands:
+      * /clarify - Requirement clarification
+      * /bugs - Bug hunting
+      * /audit - Code audit
+      * /unit-tests - Test generation
+      * /refactor - Refactoring guidance
+      * /library-docs - Library documentation lookup
+    - Development skills:
+      * confidence-check - Pre-implementation validation
+      * task-classifier - Complexity routing
+      * context7-usage - Documentation lookup
+      * orchestrator - Workflow orchestration
+      * compact - Context management
+    - MCP server configurations (no API keys required, default):
+      * context7 - Library documentation lookup
+      * sequential-thinking - Step-by-step reasoning
+      * filesystem - File operations with safety controls
+      * memory - Persistent memory across sessions
+      * git - Git repository operations
+      * fetch - Web content fetching
+      * time - Time/timezone utilities
+      * playwright - Browser automation (Microsoft official)
+      * sqlite - SQLite database operations
+      * mcp-inspector - MCP server debugging
+      * duckduckgo - Privacy-focused web search (REQUIRED for research without API keys)
+      * arxiv - Academic paper search and retrieval
+      * wikipedia - Wikipedia article search and retrieval
+
+    - MCP servers with free tiers (require API keys, --allow-free-tier-with-key):
+      * brave-search - Web search (free: 2000 queries/month)
+      * tavily - AI-optimized search (free: 1000 queries/month)
+      * github - GitHub API integration (uses personal access token)
+      * sentry - Error tracking and debugging
+
+  * Installation modes:
+    - Full (default): All commands, skills, and no-API-key MCP configurations
+    - With free tier: --allow-free-tier-with-key adds servers that need API keys but have free tiers
+    - Minimal (--minimal): Just Beyond Ralph basics
+    - Custom: --no-superclaude, --no-mcp flags for selective installation
+
+  * The installer should copy from the user's global ~/.claude/ directory where these skills
+    are already installed, allowing Beyond Ralph to leverage existing tooling.
+
+  * Optional flags:
+    - --install-mcp-packages: Actually install MCP packages via npm
+    - --allow-free-tier-with-key: Include MCP servers with free tiers that need API keys
 
 Implementation Details
 ----------------------

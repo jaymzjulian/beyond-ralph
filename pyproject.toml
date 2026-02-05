@@ -78,6 +78,7 @@ dev = [
 
 [project.scripts]
 beyond-ralph = "beyond_ralph.cli:main"
+br-install = "beyond_ralph.cli:install_cli"
 br-quota = "beyond_ralph.utils.quota_checker:main"
 br-live-tests = "beyond_ralph.testing.claude_driver:main"
 
