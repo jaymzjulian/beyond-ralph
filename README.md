@@ -1,143 +1,128 @@
-# Beyond Ralph - True Autonomous Coding
+# Beyond Ralph
 
-A Claude Code plugin that implements fully autonomous multi-agent development using the "Spec and Interview Coder" methodology.
+Autonomous multi-agent development for Claude Code. Give it a spec, answer some questions, and watch it build your project.
 
-## What is Beyond Ralph?
+## What It Does
 
-Beyond Ralph runs **inside Claude Code** as an orchestrator that spawns child Claude Code sessions to autonomously implement projects from specifications. It's NOT a separate CLI - it's a plugin that extends Claude Code itself.
+Beyond Ralph runs **inside Claude Code** as a plugin. It reads your specification, interviews you about requirements, then autonomously implements and tests the project using multiple specialized agents.
+
+Key behaviors:
+- Spawns separate agents for coding, testing, and code review
+- No agent validates its own work (three-agent trust model)
+- Pauses automatically at 85% quota, resumes when reset
+- Tracks progress with 6 checkboxes per task
 
 ## Installation
 
-```bash
-# Install the package (makes skills and hooks available to Claude Code)
-pip install -e .
+### Install Into a Project
 
-# Copy skill files to your Claude Code config (optional, for user-level access)
-cp -r .claude/skills/* ~/.claude/skills/
-cp -r .claude/hooks/* ~/.claude/hooks/
+```bash
+# Install Beyond Ralph
+uv pip install -e /path/to/beyond-ralph
+
+# Set up a project with all tools
+beyond-ralph install ~/my-project
+
+# Or with optional MCP servers that need API keys
+beyond-ralph install ~/my-project --allow-free-tier-with-key
 ```
+
+The installer adds:
+- Commands: `/beyond-ralph`, `/beyond-ralph-resume`, `/beyond-ralph-status`
+- Stop hooks for autonomous operation
+- 13 MCP servers (no API keys needed)
+- Optional: 4 more MCP servers with free tiers (need API keys)
+
+### What Gets Installed
+
+**MCP Servers (no API key)**:
+sequential-thinking, filesystem, memory, git, fetch, time, context7, playwright, sqlite, mcp-inspector, duckduckgo, arxiv, wikipedia
+
+**MCP Servers (free tier, opt-in)**:
+brave-search, tavily, github, sentry
 
 ## Usage
 
-Start a Claude Code session and use the skills:
+```bash
+cd ~/my-project
 
-```
-# In Claude Code:
-> /beyond-ralph SPEC.md
+# Start a new project
+/beyond-ralph start --spec SPEC.md
 
-# Check status:
-> /beyond-ralph-status
+# Check progress
+/beyond-ralph-status
 
-# Resume after pause:
-> /beyond-ralph-resume
+# Resume after pause or spec change
+/beyond-ralph-resume
 ```
 
 ## How It Works
 
-### Architecture
+### 8 Phases
 
-Beyond Ralph follows a strict orchestrator pattern:
+1. **Spec Ingestion** - Read and analyze your specification
+2. **Interview** - Ask clarifying questions (only phase requiring user input)
+3. **Spec Creation** - Create modular specs for each component
+4. **Planning** - Build project plan with milestones
+5. **Review** - Check for gaps, loop back if needed
+6. **Validation** - Separate agent validates the plan
+7. **Implementation** - Build with TDD, three-agent trust model
+8. **Testing** - Final validation
 
-1. **You run Claude Code normally**
-2. **Invoke `/beyond-ralph` with your spec**
-3. **Claude Code becomes the orchestrator** and spawns child sessions
-4. **Child sessions do actual work** (coding, testing, reviewing)
-5. **Orchestrator validates** using the trust model
+### Three-Agent Trust Model
 
-### 8-Phase Methodology
+During implementation:
+- **Coding Agent** writes the code
+- **Testing Agent** (different agent) validates it works
+- **Review Agent** (different agent) checks quality
 
-1. **SPEC_INGESTION** - Analyze the provided specification
-2. **INTERVIEW** - Interview user extensively with AskUserQuestion
-3. **SPEC_CREATION** - Create modular specification documents
-4. **PLANNING** - Create detailed project plan with milestones
-5. **REVIEW** - Review for uncertainties, loop back if needed
-6. **VALIDATION** - Separate agent validates the plan
-7. **IMPLEMENTATION** - Implement with test-driven development
-8. **TESTING** - Validate with separate testing agents
+No agent marks its own work complete.
 
-### Trust Model
+### Task Tracking
 
-No agent validates its own work:
+Every task needs 6 checkboxes checked:
+- Planned
+- Implemented
+- Mock tested
+- Integration tested
+- Live tested
+- Spec compliant (verified by separate agent)
 
-- **Coding Agent** implements features
-- **Testing Agent** (separate session) validates implementation
-- **Code Review Agent** (separate session) reviews code quality
-- **Orchestrator** validates all evidence
+### Code Review
 
-### Quota Management
+Multi-language linting and security scanning:
 
-Before spawning any child agent, Beyond Ralph checks `/usage`:
+| Language | Tools |
+|----------|-------|
+| Python | ruff, mypy, bandit |
+| JavaScript/TypeScript | eslint, tsc |
+| Go | staticcheck, go vet |
+| Rust | cargo clippy |
+| Kotlin | ktlint, detekt |
+| Java | checkstyle |
+| C/C++ | clang-tidy, cppcheck |
 
-- At **85% session OR weekly quota**: Pause all work
-- Check every **10 minutes** while paused
-- Resume automatically when quota resets
+### Resume Behavior
 
-### Record Keeping
-
-Every task has 5 checkboxes that must ALL be checked:
-
-- [ ] **Planned** - Implementation approach defined
-- [ ] **Implemented** - Code written
-- [ ] **Mock Tested** - Unit tests pass
-- [ ] **Integration Tested** - CI/integration tests pass
-- [ ] **Live Tested** - Tested in real environment
-
-**100% completion required** - anything less is unacceptable.
-
-### Knowledge Sharing
-
-All agents share knowledge via `beyondralph_knowledge/`:
-
-- Each entry includes the session UUID that created it
-- Agents check knowledge base before asking orchestrator
-- Enables context persistence across sessions
-
-## Configuration
-
-### Safemode
-
-By default, child agents use `--dangerously-skip-permissions`.
-To require permission prompts:
-
-```
-> /beyond-ralph --safemode SPEC.md
-```
-
-### Autonomous Installation
-
-If enabled, agents can install dependencies automatically:
-
-```
-> /beyond-ralph --auto-install SPEC.md
-```
+`/beyond-ralph-resume` validates the spec before resuming. If the spec changed, it identifies new/removed/modified requirements and updates the plan. It never blindly trusts the state file.
 
 ## Project Structure
 
 ```
-.beyond_ralph/          # State and configuration
-  state.json            # Current orchestrator state
-
-beyondralph_knowledge/  # Shared knowledge base
-  *.md                  # Knowledge entries with YAML frontmatter
-
-records/                # Task tracking
-  [module]/             # Per-module task lists
-    tasks.md            # Tasks with 5 checkboxes each
-```
-
-## Utilities
-
-Check quota directly:
-
-```bash
-br-quota
+your-project/
+├── SPEC.md                    # Your specification
+├── .beyond_ralph_state        # Orchestrator state
+├── beyondralph_knowledge/     # Shared knowledge base
+└── records/                   # Task tracking
+    └── [module]/
+        └── tasks.md           # Tasks with 6 checkboxes each
 ```
 
 ## Requirements
 
-- Claude Code CLI installed and authenticated
 - Python 3.11+
-- pexpect (for quota checking)
+- uv (recommended) or pip
+- Claude Code CLI
 
 ## License
 

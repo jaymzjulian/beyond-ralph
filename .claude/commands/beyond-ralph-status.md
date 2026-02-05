@@ -15,7 +15,7 @@ Check the current status of the Beyond Ralph autonomous development project.
 1. **Read State**: Check `.beyond_ralph_state` for current phase and progress
 
 2. **Task Progress**: Scan `records/*/tasks.md` for checkbox status:
-   - Count tasks with all 5 checkboxes ✓
+   - Count tasks with all 6 checkboxes ✓
    - Count tasks in progress
    - Count tasks not started
 
