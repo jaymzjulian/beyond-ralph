@@ -1,12 +1,13 @@
 """Records System for Beyond Ralph.
 
-Handles task tracking with 6 checkboxes per task:
+Handles task tracking with 7 checkboxes per task:
 - Planned
 - Implemented
 - Mock tested
 - Integration tested
 - Live tested
 - Spec Compliant (verified by separate agent that implementation matches spec)
+- Audit Verified (verified by static analysis + LLM interrogation for stubs/fakes)
 """
 
 import re
@@ -29,6 +30,7 @@ class Checkbox(Enum):
     INTEGRATION_TESTED = "integration_tested"
     LIVE_TESTED = "live_tested"
     SPEC_COMPLIANT = "spec_compliant"  # Verified by separate agent
+    AUDIT_VERIFIED = "audit_verified"  # Verified by static analysis + LLM interrogation
 
 
 CHECKBOX_LABELS = {
@@ -38,17 +40,18 @@ CHECKBOX_LABELS = {
     Checkbox.INTEGRATION_TESTED: "Integration tested",
     Checkbox.LIVE_TESTED: "Live tested",
     Checkbox.SPEC_COMPLIANT: "Spec compliant",
+    Checkbox.AUDIT_VERIFIED: "Audit verified",
 }
 
 
 @dataclass
 class Task:
-    """A task with 6 checkboxes.
+    """A task with 7 checkboxes.
 
     The 6th checkbox (SPEC_COMPLIANT) is verified by a SEPARATE agent
     that confirms the implementation matches what the spec says.
-    This is critical for catching cases where tests pass but the
-    implementation doesn't match requirements.
+    The 7th checkbox (AUDIT_VERIFIED) is verified by static analysis
+    and LLM interrogation to catch stubs, fakes, and TODOs.
     """
 
     id: str
@@ -71,7 +74,7 @@ class Task:
 
     @property
     def is_complete(self) -> bool:
-        """Check if all 6 checkboxes are checked."""
+        """Check if all 7 checkboxes are checked."""
         return all(self.checkboxes.values())
 
     @property
@@ -82,7 +85,7 @@ class Task:
     @property
     def completion_fraction(self) -> str:
         """Return completion as X/6 string."""
-        return f"{self.completion_count}/6"
+        return f"{self.completion_count}/7"
 
     def to_markdown(self) -> str:
         """Convert task to Markdown format."""
@@ -262,7 +265,7 @@ class RecordsManager:
         return self.parse_tasks_file(module)
 
     def get_incomplete_tasks(self) -> list[Task]:
-        """Get all tasks without 5/5 checkboxes.
+        """Get all incomplete tasks (not all 7 checkboxes checked).
 
         Returns:
             List of incomplete Task objects.
@@ -292,7 +295,7 @@ class RecordsManager:
         return all_tasks
 
     def is_complete(self) -> bool:
-        """Check if ALL tasks have 5/5 checkboxes.
+        """Check if ALL tasks have 7/7 checkboxes.
 
         Returns:
             True if all tasks complete.

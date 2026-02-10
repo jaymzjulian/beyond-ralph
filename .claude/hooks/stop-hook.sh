@@ -91,7 +91,7 @@ Current state:
 
 DO NOT STOP. Continue executing the current phase.
 Check PROJECT_PLAN.md and records/*/tasks.md for what needs to be done.
-Work through phases until ALL tasks have 6/6 checkboxes.
+Work through phases until ALL tasks have 7/7 checkboxes.
 
 Output AUTOMATION_COMPLETE only when truly complete."
 

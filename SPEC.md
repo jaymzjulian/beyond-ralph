@@ -52,8 +52,9 @@ EWach of these phases is done in a dedicated agent!
  * Phase 4: Create a project plan.  It should be phased based on the above implementatbale modules, implement milestones, and include plans for testing
  * Phase 5: Exampline all of this, and if there are ANY uncertanties, interview the user again, returning to phase 2, and repeating phases 2, 3, and 4 in a loop until you have a complete, implementable project plan
  * pahse 6: have another agent validate the project plan, and make adjustments if needed
- * Phase 7: start implementing 
+ * Phase 7: start implementing
  * Phase 8: test the implementation is complete.  If it is not, return to phase 6 - adjust the proejct plan, and implement the adjusted plan
+ * Phase 9: Implementation Audit - run a two-pronged audit on ALL modules: (1) static analysis for stubs/TODOs/fakes, (2) LLM interrogation asking a separate agent "is this implementation real?". If stubs are found, return to phase 7. Only after audit passes can modules be marked Audit Verified.
 
 Note that iterating on the project plan is important!!!
 
@@ -70,17 +71,23 @@ This is going to be a LONG iterative develpoment process for a large portion of 
 
 Record Keeping
 ---------------
-Keep STRONG records and task lists - manage development like a formal project as much as possible!!!  Task lists should have 6 checkboxes:
+Keep STRONG records and task lists - manage development like a formal project as much as possible!!!  Task lists should have 7 checkboxes:
  * Planned - we know how we're going to implement it
  * Implemented - we believe we have an implementation
  * Mock tested - tested in a unit-testy way
  * Integration tested - tested in a CI way
  * Livetested - tested in the real application
  * Spec Compliant - verified by a SEPARATE agent that the implementation matches what the spec says
+ * Audit Verified - verified by static analysis AND LLM interrogation that the implementation is real (no stubs, fakes, TODOs, or NotImplementedError)
 
 The Spec Compliant checkbox is CRITICAL - a dedicated agent (NOT the implementation agent, NOT the testing agent) must verify that what was built actually matches what was specified. This catches cases where tests pass but the implementation doesn't match requirements.
 
-ALL of these must be checked to pass 100%, and anything less than 100% is unacceptable.  Note that a failing testing agent CAN and SHOULD update these to REMOVE the implemented checkbox, particularly, if it is NOT in fact correctly implemented. Similarly, a spec compliance agent CAN and SHOULD remove the Implemented checkbox if the implementation doesn't match the spec.
+The Audit Verified checkbox is also CRITICAL - a two-pronged audit (Phase 9) must verify implementations are real:
+  1. Static analysis scans for NotImplementedError, TODO, FIXME, HACK, empty function bodies, placeholder strings
+  2. LLM interrogation asks a SEPARATE agent point-blank "is this implementation real or faked?" for every module
+This catches cases where an agent declares work complete but has actually used stubs or fake implementations.
+
+ALL of these must be checked to pass 100%, and anything less than 100% is unacceptable.  Note that a failing testing agent CAN and SHOULD update these to REMOVE the implemented checkbox, particularly, if it is NOT in fact correctly implemented. Similarly, a spec compliance agent CAN and SHOULD remove the Implemented checkbox if the implementation doesn't match the spec. An audit agent CAN and SHOULD remove the Implemented checkbox if stub/fake implementations are detected.
 
 Each module should ahve its own individual specs as well, which it needs to me, in order to split that up - again, modularize as much as possible, adn this includes the record keeping.  Have a sepearte records/[modulename] folder for each module of the system that keeps these
 

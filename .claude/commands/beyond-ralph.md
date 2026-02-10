@@ -80,7 +80,22 @@ Spawn SEPARATE testing agents:
 Task(subagent_type="general-purpose", prompt="Test [module] - run unit, integration tests...")
 ```
 - If tests fail, loop back to Phase 7 for fixes
-- **When ALL tests pass, check completion**
+- **When ALL tests pass, proceed to Phase 9**
+
+### Phase 9: IMPLEMENTATION_AUDIT
+Two-pronged audit to catch stubs, fakes, and TODOs:
+
+**Prong 1: Static Analysis** (fast, deterministic)
+- Scan source files for NotImplementedError, TODO, FIXME, HACK, empty function bodies
+- If CRITICAL or HIGH findings exist, loop back to Phase 7
+
+**Prong 2: LLM Interrogation** (thorough, semantic)
+- For EACH module, spawn a SEPARATE audit agent that reads spec + code
+- Ask point-blank: "Is this implementation REAL or FAKED?"
+- The LLM knows when it faked something and will admit it under direct questioning
+- If any fakes found, loop back to Phase 7
+
+**Both prongs must pass before marking tasks as Audit Verified.**
 
 ## Spawning Agents
 
@@ -98,7 +113,7 @@ Task(
 )
 ```
 
-## Task Checkboxes (6 per task)
+## Task Checkboxes (7 per task)
 
 Every task in `records/[module]/tasks.md` needs:
 - [ ] Planned
@@ -107,6 +122,7 @@ Every task in `records/[module]/tasks.md` needs:
 - [ ] Integration Tested
 - [ ] Live Tested
 - [ ] Spec Compliant
+- [ ] Audit Verified
 
 ## Completion Check
 
@@ -114,7 +130,7 @@ After EVERY phase, check:
 1. Read `records/*/tasks.md` files
 2. Count incomplete tasks
 3. If tasks remain: **CONTINUE TO NEXT PHASE**
-4. If ALL tasks have 6/6 checkboxes: Reply "AUTOMATION_COMPLETE"
+4. If ALL tasks have 7/7 checkboxes: Reply "AUTOMATION_COMPLETE"
 
 ## Quota Management
 
@@ -134,7 +150,7 @@ Persist state to `.beyond_ralph_state`. The `prompt` field is CRITICAL - the sto
   "spec_path": "SPEC.md",
   "last_activity": "2026-02-03T...",
   "hook_iteration": 0,
-  "prompt": "You are the Beyond Ralph Orchestrator. You have N incomplete tasks.\n\nRead records/*/tasks.md to find incomplete tasks.\nUse the Task tool to spawn agents.\nMark checkboxes as complete when verified.\nContinue until ALL tasks have 6/6 checkboxes.\n\nPhase: implementation | Spec: SPEC.md\n\nOutput AUTOMATION_COMPLETE only when all N remaining tasks are done."
+  "prompt": "You are the Beyond Ralph Orchestrator. You have N incomplete tasks.\n\nRead records/*/tasks.md to find incomplete tasks.\nUse the Task tool to spawn agents.\nMark checkboxes as complete when verified.\nContinue until ALL tasks have 7/7 checkboxes.\n\nPhase: implementation | Spec: SPEC.md\n\nOutput AUTOMATION_COMPLETE only when all N remaining tasks are done."
 }
 ```
 
@@ -146,6 +162,6 @@ Persist state to `.beyond_ralph_state`. The `prompt` field is CRITICAL - the sto
 2. **Execute** Phase 1: Spec Ingestion
 3. **Continue** through phases WITHOUT STOPPING
 4. **Only pause** for: Interview (Phase 2) OR Quota limit (85%)
-5. **Complete** when all tasks have 6/6 checkboxes
+5. **Complete** when all tasks have 7/7 checkboxes
 
 **BEGIN IMMEDIATELY. DO NOT WAIT.**

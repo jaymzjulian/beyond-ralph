@@ -32,6 +32,7 @@ class Phase(Enum):
     VALIDATION = "validation"  # Phase 6
     IMPLEMENTATION = "implementation"  # Phase 7
     TESTING = "testing"  # Phase 8
+    IMPLEMENTATION_AUDIT = "implementation_audit"  # Phase 9
     COMPLETE = "complete"
     PAUSED = "paused"
     FAILED = "failed"
@@ -149,6 +150,7 @@ class Orchestrator:
             Phase.VALIDATION,
             Phase.IMPLEMENTATION,
             Phase.TESTING,
+            Phase.IMPLEMENTATION_AUDIT,
             Phase.COMPLETE,
         ]
 
@@ -363,6 +365,7 @@ class Orchestrator:
             Phase.VALIDATION: self._phase_validation,
             Phase.IMPLEMENTATION: self._phase_implementation,
             Phase.TESTING: self._phase_testing,
+            Phase.IMPLEMENTATION_AUDIT: self._phase_implementation_audit,
         }
 
         handler = handlers.get(self.phase)
@@ -576,7 +579,7 @@ Split into independent modules with:
 - Clear interfaces between modules
 - Explicit dependencies
 - Test requirements for each module
-- 6-checkbox task tracking (Planned, Implemented, Mock tested, Integration tested, Live tested, Spec compliant)
+- 7-checkbox task tracking (Planned, Implemented, Mock tested, Integration tested, Live tested, Spec compliant, Audit verified)
 
 Write the modular specification to records/[module_name]/spec.md for each module.
 Also create a MODULAR_SPEC.md in the project root summarizing all modules.""",
@@ -613,7 +616,7 @@ Also create a MODULAR_SPEC.md in the project root summarizing all modules.""",
 4. Risk mitigation strategies
 
 For each module, create records/[module]/tasks.md with:
-- Task checkboxes (6 checkboxes per task)
+- Task checkboxes (7 checkboxes per task)
 - Clear acceptance criteria
 - Dependencies on other modules
 
@@ -709,7 +712,7 @@ Check:
 3. Testing plans cover all acceptance criteria
 4. Implementation order respects dependencies
 5. No circular dependencies exist
-6. Each task has all 6 checkboxes defined
+6. Each task has all 7 checkboxes defined
 
 Output:
 - VALID: true/false
@@ -979,7 +982,7 @@ INCOMPLETE_TASKS: (list of tasks missing checkboxes)""",
         result_text = session.result or ""
         all_passed = "ALL_TESTS_PASSED: true" in result_text.lower()
 
-        # Check if all tasks are complete (6/6 checkboxes)
+        # Check if all tasks are complete (7/7 checkboxes)
         if self.records_manager.is_complete():
             return PhaseResult(
                 success=True,
@@ -1054,6 +1057,136 @@ If SPEC_COMPLIANT is true, mark [x] Spec compliant on all tasks.""",
                 "testing_result": session.result,
                 "compliance_result": compliance_session.result,
             },
+        )
+
+    async def _phase_implementation_audit(self) -> PhaseResult:
+        """Phase 9: Implementation Audit - catch stubs, fakes, and TODOs.
+
+        Two-pronged approach:
+        1. Static analysis: grep for NotImplementedError, TODO, pass, placeholder strings
+        2. LLM interrogation: ask a separate agent "is this implementation real?"
+
+        If stubs are found, loops back to Phase 7 (IMPLEMENTATION) for fixes.
+        """
+        logger.info("Phase 9: Implementation Audit")
+
+        if self._enable_streaming:
+            print("[BEYOND-RALPH] Phase 9: Running implementation audit...")
+
+        # Prong 1: Static analysis (fast, deterministic)
+        from beyond_ralph.core.audit import AuditSeverity, run_static_audit
+
+        if self._enable_streaming:
+            print("[BEYOND-RALPH] Prong 1: Static analysis for stubs/fakes...")
+
+        audit_result = run_static_audit(
+            project_root=self.project_root,
+            min_severity=AuditSeverity.HIGH,
+        )
+
+        if not audit_result.passed:
+            findings_text = "\n".join(
+                f"  - {f.file}:{f.line_number} [{f.severity.value}] "
+                f"{f.pattern_name}: {f.line_text}"
+                for f in audit_result.findings
+            )
+            if self._enable_streaming:
+                print(f"[BEYOND-RALPH] Static audit FAILED: {audit_result.critical_count} critical, "
+                      f"{audit_result.high_count} high findings")
+                print(findings_text)
+
+            return PhaseResult(
+                success=True,
+                phase=Phase.IMPLEMENTATION_AUDIT,
+                message=f"Static audit failed: {audit_result.critical_count} critical, "
+                        f"{audit_result.high_count} high findings - returning to implementation",
+                should_loop=True,
+                loop_to_phase=Phase.IMPLEMENTATION,
+                data={
+                    "audit_passed": False,
+                    "findings": findings_text,
+                    "critical_count": audit_result.critical_count,
+                    "high_count": audit_result.high_count,
+                },
+            )
+
+        if self._enable_streaming:
+            print(f"[BEYOND-RALPH] Static audit passed: {audit_result.files_scanned} files clean")
+
+        # Prong 2: LLM interrogation (ask a separate agent if implementations are real)
+        if self._enable_streaming:
+            print("[BEYOND-RALPH] Prong 2: LLM interrogation - checking each module...")
+
+        modules = self.records_manager.get_modules()
+
+        for module in modules:
+            if self._enable_streaming:
+                print(f"[BEYOND-RALPH] Interrogating module: {module}")
+
+            interrogation_session = await self.session_manager.spawn(
+                use_cli=self.use_cli,
+                prompt=f"""IMPLEMENTATION AUDIT AGENT: You are a SEPARATE agent auditing module '{module}'.
+
+Your job is to determine if the implementation is REAL or FAKED.
+
+Read the source code in the project and answer these questions for EACH function/class:
+1. Is this a real implementation or a stub/placeholder?
+2. Does the code actually DO what it claims to do?
+3. Are there any TODOs, FIXMEs, or "implement me" comments?
+4. Are there any functions that just return hardcoded values or raise NotImplementedError?
+5. Are there any empty except blocks or pass-only function bodies?
+
+Be BRUTALLY HONEST. If something looks fake, say so.
+
+Output format:
+AUDIT_PASSED: true/false
+FAKED_ITEMS: (list of faked/stub implementations with file:line)
+REAL_ITEMS: (count of verified real implementations)
+CONCERNS: (any other concerns)
+
+If AUDIT_PASSED is false, list EVERY faked item so it can be fixed.""",
+                agent_type="validation",
+                output_callback=self._stream_output,
+            )
+
+            result_text = interrogation_session.result or ""
+            audit_passed = "AUDIT_PASSED: true" in result_text.lower()
+
+            if not audit_passed:
+                if self._enable_streaming:
+                    print(f"[BEYOND-RALPH] LLM audit FAILED for module: {module}")
+
+                return PhaseResult(
+                    success=True,
+                    phase=Phase.IMPLEMENTATION_AUDIT,
+                    message=f"LLM audit failed for module '{module}' - "
+                            f"returning to implementation",
+                    should_loop=True,
+                    loop_to_phase=Phase.IMPLEMENTATION,
+                    data={
+                        "audit_passed": False,
+                        "module": module,
+                        "interrogation_result": result_text,
+                    },
+                )
+
+        # Both prongs passed - mark audit verified on all tasks
+        if self._enable_streaming:
+            print("[BEYOND-RALPH] Implementation audit PASSED - all modules verified")
+
+        for module in modules:
+            tasks = self.records_manager.get_module_tasks(module)
+            for task in tasks:
+                self.records_manager.update_checkbox(
+                    module, task.name, Checkbox.AUDIT_VERIFIED, True
+                )
+
+        return PhaseResult(
+            success=True,
+            phase=Phase.IMPLEMENTATION_AUDIT,
+            message="Implementation audit passed - all modules verified as real implementations",
+            next_phase=Phase.COMPLETE,
+            data={"audit_passed": True, "modules_audited": modules},
         )
 
 

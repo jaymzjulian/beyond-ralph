@@ -9,6 +9,7 @@ These agents handle specific phases of the Spec and Interview Coder methodology:
 6. ValidationAgent - Validates project plans
 7. ImplementationAgent - Implements features with TDD
 8. TestingAgent - Runs tests and provides evidence
+9. ImplementationAuditAgent - Audits for stubs, fakes, and TODOs
 """
 
 from __future__ import annotations
@@ -701,6 +702,90 @@ class SpecComplianceAgent(TrustModelAgent):
         }
 
 
+class ImplementationAuditAgent(TrustModelAgent, PhaseAgent):
+    """Phase 9: Implementation Audit Agent.
+
+    Two-pronged verification that catches stubs, fakes, and TODOs:
+    1. Static analysis - grep for NotImplementedError, TODO, pass, placeholder strings
+    2. LLM interrogation - ask point-blank "is this implementation real?"
+
+    This agent is SEPARATE from coding, testing, and review agents.
+    It is the final gate before marking a task as complete.
+
+    Trust model: can audit/review, cannot implement or test.
+    """
+
+    name = "implementation_audit_agent"
+    description = "Audits implementations for stubs, fakes, and TODOs"
+    tools = ["Read", "Grep", "Glob", "Bash"]
+    model = AgentModel.OPUS  # Use most capable for interrogation
+    phase = 9
+
+    # Trust model: can review/audit, cannot implement or test
+    can_implement = False
+    can_test = False
+    can_review = True
+
+    async def execute(self, task: AgentTask) -> AgentResult:
+        """Run implementation audit on a module.
+
+        Expected context:
+        - module: Module name to audit
+        - project_root: Project root path
+        - source_dirs: Optional list of source directories to scan
+
+        Returns:
+            AgentResult with audit findings.
+        """
+        module = task.context.get("module", "unknown")
+        project_root = Path(task.context.get("project_root", str(self.project_root)))
+        source_dirs = task.context.get("source_dirs")
+
+        # Prong 1: Static analysis
+        from beyond_ralph.core.audit import run_static_audit
+
+        audit_result = run_static_audit(
+            project_root=project_root,
+            source_dirs=source_dirs,
+        )
+
+        if not audit_result.passed:
+            findings_text = "\n".join(
+                f"  - {f.file}:{f.line_number} [{f.severity.value}] "
+                f"{f.pattern_name}: {f.line_text}"
+                for f in audit_result.findings
+            )
+            return self.fail(
+                f"Static audit FAILED for '{module}': "
+                f"{audit_result.critical_count} critical, "
+                f"{audit_result.high_count} high findings.\n{findings_text}",
+                data={
+                    "module": module,
+                    "static_audit_passed": False,
+                    "findings_count": len(audit_result.findings),
+                    "critical_count": audit_result.critical_count,
+                    "high_count": audit_result.high_count,
+                },
+            )
+
+        # Prong 2: LLM interrogation happens at the orchestrator level
+        # (spawns a separate agent to ask "is this real?")
+        # This agent reports static analysis results; the orchestrator
+        # handles the LLM interrogation step.
+
+        return self.succeed(
+            output=f"Static audit PASSED for '{module}': "
+            f"{audit_result.files_scanned} files scanned, "
+            f"{len(audit_result.findings)} findings (all below threshold)",
+            data={
+                "module": module,
+                "static_audit_passed": True,
+                "files_scanned": audit_result.files_scanned,
+                "findings_count": len(audit_result.findings),
+            },
+        )
+
+
 # Export all phase agents
 PHASE_AGENTS = {
     1: SpecAgent,
@@ -711,6 +796,7 @@ PHASE_AGENTS = {
     6: ValidationAgent,
     7: ImplementationAgent,
     8: TestingValidationAgent,
+    9: ImplementationAuditAgent,
 }
 
 # Additional specialized agents (not phase-specific)
@@ -732,7 +818,7 @@ def get_phase_agent(phase: int) -> type[PhaseAgent]:
         ValueError: If phase is invalid
     """
     if phase not in PHASE_AGENTS:
-        raise ValueError(f"Invalid phase: {phase}. Must be 1-8.")
+        raise ValueError(f"Invalid phase: {phase}. Must be 1-9.")
     return PHASE_AGENTS[phase]
 
 

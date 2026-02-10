@@ -53,7 +53,7 @@ Compare spec requirements vs actual state:
 For each requirement in SPEC.md:
   - Is it in PROJECT_PLAN.md?
   - Is there a module for it?
-  - Are all 6 checkboxes checked?
+  - Are all 7 checkboxes checked?
   - Does the implementation ACTUALLY match the requirement?
 
 If ANY gaps found:
@@ -69,7 +69,7 @@ If ANY gaps found:
   "phase": "<current_phase>",
   "last_activity": "<current_timestamp>",
   "hook_iteration": 0,
-  "prompt": "You are the Beyond Ralph Orchestrator. You have N incomplete tasks.\n\nRead records/*/tasks.md to find incomplete tasks ([ ] checkboxes).\nUse the Task tool to spawn agents for implementation and testing.\nMark checkboxes as complete [x] when verified.\nContinue until ALL tasks have 6/6 checkboxes.\n\nPhase: PHASE | Spec: SPEC_PATH\n\nOutput AUTOMATION_COMPLETE only when all N remaining tasks are done."
+  "prompt": "You are the Beyond Ralph Orchestrator. You have N incomplete tasks.\n\nRead records/*/tasks.md to find incomplete tasks ([ ] checkboxes).\nUse the Task tool to spawn agents for implementation and testing.\nMark checkboxes as complete [x] when verified.\nContinue until ALL tasks have 6/7 checkboxes.\n\nPhase: PHASE | Spec: SPEC_PATH\n\nOutput AUTOMATION_COMPLETE only when all N remaining tasks are done."
 }
 ```
 

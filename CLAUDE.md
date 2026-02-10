@@ -426,7 +426,7 @@ logger.error("Session %s failed: %s", session.uuid, error)
 
 ### Test Categories and Checkboxes
 
-Every feature MUST have all six checkboxes checked:
+Every feature MUST have all seven checkboxes checked:
 
 ```markdown
 - [x] Planned - design documented
@@ -435,9 +435,14 @@ Every feature MUST have all six checkboxes checked:
 - [x] Integration tested - integration tests pass
 - [x] Live tested - works in real Claude Code environment
 - [x] Spec compliant - verified by SEPARATE agent that implementation matches spec
+- [x] Audit verified - verified by static analysis + LLM interrogation (no stubs/fakes/TODOs)
 ```
 
 **Note**: The Spec Compliant checkbox is verified by a SpecComplianceAgent that is DIFFERENT from both the implementation agent and the testing agent. This catches cases where tests pass but the implementation doesn't match requirements.
+
+**Note**: The Audit Verified checkbox is verified by a two-pronged Implementation Audit (Phase 9):
+1. **Static analysis** scans for NotImplementedError, TODO, FIXME, empty function bodies, placeholder strings
+2. **LLM interrogation** asks a separate agent point-blank "is this implementation real or faked?"
 
 ### Test Structure
 
@@ -717,6 +722,8 @@ The Code Review Agent MUST check:
 - [x] Mock tested - 2024-01-16
 - [ ] Integration tested
 - [ ] Live tested
+- [ ] Spec compliant
+- [ ] Audit verified
 
 Notes:
 - Implementation agent: [UUID]

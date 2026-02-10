@@ -41,6 +41,24 @@ def block_exit(prompt: str, iteration: int, incomplete: int) -> None:
     sys.exit(0)
 
 
+def _run_audit_gate() -> tuple[bool, str]:
+    """Run static audit as a gate before accepting AUTOMATION_COMPLETE.
+
+    Returns:
+        Tuple of (passed: bool, summary: str)
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+        from beyond_ralph.core.audit import quick_audit_for_hook
+        return quick_audit_for_hook(Path.cwd())
+    except ImportError:
+        debug_log("Could not import audit module - skipping audit gate")
+        return True, "Audit module not available (skipped)"
+    except Exception as e:
+        debug_log(f"Audit gate error: {e}")
+        return True, f"Audit gate error (skipped): {e}"
+
+
 def main() -> None:
     """Main stop hook logic."""
     # Read hook input from stdin
@@ -108,10 +126,34 @@ def main() -> None:
                     continue
 
             if "AUTOMATION_COMPLETE" in last_text:
-                debug_log("Found AUTOMATION_COMPLETE in transcript - allowing exit")
-                state["state"] = "complete"
-                state_file.write_text(json.dumps(state, indent=2))
-                allow_exit()
+                debug_log("Found AUTOMATION_COMPLETE - running audit gate...")
+                # AUDIT GATE: Run static analysis before accepting completion
+                audit_passed, audit_summary = _run_audit_gate()
+                if not audit_passed:
+                    debug_log(f"Audit gate BLOCKED completion: {audit_summary}")
+                    # Don't allow exit - force continuation with audit findings
+                    audit_prompt = state.get("prompt", "")
+                    if audit_prompt:
+                        audit_prompt += (
+                            f"\n\n**AUDIT GATE FAILED** - Cannot accept AUTOMATION_COMPLETE.\n"
+                            f"{audit_summary}\n"
+                            f"Fix ALL findings before declaring complete."
+                        )
+                    else:
+                        audit_prompt = (
+                            f"AUDIT GATE FAILED: {audit_summary}\n"
+                            f"Fix all stubs, TODOs, and fake implementations, "
+                            f"then output AUTOMATION_COMPLETE."
+                        )
+                    state["hook_iteration"] = iteration
+                    state["last_activity"] = datetime.now(timezone.utc).isoformat()
+                    state_file.write_text(json.dumps(state, indent=2))
+                    block_exit(audit_prompt, iteration, incomplete=1)
+                else:
+                    debug_log(f"Audit gate passed: {audit_summary}")
+                    state["state"] = "complete"
+                    state_file.write_text(json.dumps(state, indent=2))
+                    allow_exit()
 
             if "PAUSED_FOR_QUOTA" in last_text or "QUOTA_LIMIT_REACHED" in last_text:
                 debug_log("Found quota pause signal - allowing exit")
@@ -172,7 +214,7 @@ def main() -> None:
 Read records/*/tasks.md to find incomplete tasks ([ ] checkboxes).
 Use the Task tool to spawn agents for implementation and testing.
 Mark checkboxes as complete [x] when verified.
-Continue until ALL tasks have 6/6 checkboxes.
+Continue until ALL tasks have 7/7 checkboxes.
 
 Phase: {phase} | Spec: {spec_path}
 
