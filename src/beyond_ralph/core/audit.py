@@ -178,6 +178,46 @@ def _is_test_file(file_path: Path) -> bool:
     )
 
 
+def _is_in_string_or_regex(line: str, match_start: int) -> bool:
+    """Check if a match position is inside a string literal or regex pattern."""
+    # Check if the match appears inside quotes (rough heuristic)
+    prefix = line[:match_start]
+    # Count unescaped quotes before the match
+    single_quotes = prefix.count("'") - prefix.count("\\'")
+    double_quotes = prefix.count('"') - prefix.count('\\"')
+    # If odd number of quotes, we're inside a string
+    if single_quotes % 2 == 1 or double_quotes % 2 == 1:
+        return True
+    # Check for raw strings / regex patterns: r"...", r'...'
+    if re.search(r'r["\']', prefix):
+        # Could be inside a raw string
+        for m in re.finditer(r'r(["\'])', prefix):
+            quote_char = m.group(1)
+            rest = prefix[m.end():]
+            if quote_char not in rest:
+                return True  # Still inside the raw string
+    return False
+
+
+def _is_in_docstring(lines: list[str], line_index: int) -> bool:
+    """Check if a line is inside a docstring."""
+    in_docstring = False
+    for i in range(line_index):
+        stripped = lines[i].strip()
+        triple_double = stripped.count('"""')
+        triple_single = stripped.count("'''")
+        total = triple_double + triple_single
+        if total % 2 == 1:
+            in_docstring = not in_docstring
+    return in_docstring
+
+
+def _is_comment_line(line: str) -> bool:
+    """Check if the line is a comment (not code with an inline comment)."""
+    stripped = line.strip()
+    return stripped.startswith("#") or stripped.startswith("//") or stripped.startswith("/*")
+
+
 def _scan_file(
     file_path: Path,
     project_root: Path,
@@ -197,20 +237,78 @@ def _scan_file(
         if severity not in active_severities:
             continue
         for i, line in enumerate(lines, 1):
-            if re.search(pattern_str, line, re.IGNORECASE):
-                result.findings.append(
-                    AuditFinding(
-                        file=rel_path,
-                        line_number=i,
-                        pattern_name=pattern_name,
-                        severity=severity,
-                        line_text=line.strip(),
-                    )
+            match = re.search(pattern_str, line, re.IGNORECASE)
+            if not match:
+                continue
+
+            # Skip findings inside string literals or regex patterns
+            if _is_in_string_or_regex(line, match.start()):
+                continue
+
+            # Skip findings inside docstrings
+            if _is_in_docstring(lines, i - 1):
+                continue
+
+            # For TODO/FIXME/HACK/XXX markers: only flag actual code comments,
+            # not mentions in docstrings, variable names, or descriptions.
+            # A real marker looks like: "# TODO: fix this" or "// FIXME: broken"
+            if pattern_name in ("TODO marker", "FIXME marker", "HACK marker", "XXX marker"):
+                is_code_comment = bool(re.search(r"#\s*" + pattern_str, line))
+                is_slash_comment = bool(re.search(r"//\s*" + pattern_str, line))
+                if not is_code_comment and not is_slash_comment:
+                    continue
+                # Also skip if this comment is describing detection logic
+                # (e.g. "# Must check for TODO markers")
+                lower = line.lower()
+                if any(kw in lower for kw in [
+                    "detect", "match", "pattern", "search", "check for",
+                    "look for", "scan for", "flag",
+                ]):
+                    continue
+
+            # For placeholder string patterns: skip if inside a regex/string definition
+            if pattern_name == "placeholder string literal":
+                stripped = line.strip()
+                if stripped.startswith("(r") or stripped.startswith("r\"") or stripped.startswith("r'"):
+                    continue
+
+            result.findings.append(
+                AuditFinding(
+                    file=rel_path,
+                    line_number=i,
+                    pattern_name=pattern_name,
+                    severity=severity,
+                    line_text=line.strip(),
                 )
+            )
 
     # Special check: functions/methods with only `pass` or `...` as body
     if AuditSeverity.CRITICAL in active_severities:
         _check_empty_function_bodies(lines, rel_path, result)
+
+
+def _is_abstract_method(lines: list[str], def_index: int) -> bool:
+    """Check if a function definition is an abstract method."""
+    # Check decorator on preceding lines
+    for j in range(max(0, def_index - 5), def_index):
+        stripped = lines[j].strip()
+        if stripped.startswith("@abstractmethod") or stripped.startswith("@abc.abstractmethod"):
+            return True
+    # Also check if the class inherits from ABC
+    for j in range(max(0, def_index - 50), def_index):
+        stripped = lines[j].strip()
+        if stripped.startswith("class ") and ("ABC" in stripped or "abstractmethod" in stripped):
+            return True
+    return False
+
+
+def _is_protocol_method(lines: list[str], def_index: int) -> bool:
+    """Check if a function is in a Protocol or abstract base class."""
+    for j in range(max(0, def_index - 50), def_index):
+        stripped = lines[j].strip()
+        if stripped.startswith("class ") and ("Protocol" in stripped):
+            return True
+    return False
 
 
 def _check_empty_function_bodies(
@@ -218,10 +316,22 @@ def _check_empty_function_bodies(
     rel_path: str,
     result: StaticAuditResult,
 ) -> None:
-    """Check for functions whose body is just pass or ellipsis (after docstring)."""
+    """Check for functions whose body is just pass or ellipsis (after docstring).
+
+    Skips abstract methods, protocol methods, and type stubs which legitimately
+    use pass/... as their body.
+    """
     for i, line in enumerate(lines):
         stripped = line.strip()
         if not stripped.startswith(("def ", "async def ")):
+            continue
+
+        # Skip abstract methods - they're supposed to have ... or pass
+        if _is_abstract_method(lines, i):
+            continue
+
+        # Skip Protocol methods
+        if _is_protocol_method(lines, i):
             continue
 
         body_line = _get_first_body_line(lines, i)

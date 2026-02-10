@@ -570,6 +570,18 @@ class ResearchAgent(BaseAgent):
         """Get alternative tools for a category."""
         return self.ALTERNATIVES.get(category, [])
 
+    def _find_tool_by_name(
+        self, tool_name: str, category: ToolCategory
+    ) -> DiscoveredTool | None:
+        """Look up a tool by name from preferred tools and alternatives."""
+        preferred = self.PREFERRED_TOOLS.get(category)
+        if preferred and preferred.name == tool_name:
+            return preferred
+        for alt in self.ALTERNATIVES.get(category, []):
+            if alt.name == tool_name:
+                return alt
+        return None
+
     async def find_and_install_tool(
         self,
         category: ToolCategory,
@@ -596,9 +608,15 @@ class ResearchAgent(BaseAgent):
         if knowledge:
             # Use previous decision if available
             for entry in knowledge:
-                if "installed_tool" in entry.get("content", ""):
-                    # TODO: Parse and return cached tool
-                    pass
+                content = entry.get("content", "")
+                if "installed_tool" in content:
+                    # Extract cached tool name from knowledge entry
+                    for line in content.split("\n"):
+                        if line.strip().startswith("installed_tool:"):
+                            tool_name = line.split(":", 1)[1].strip()
+                            cached = self._find_tool_by_name(tool_name, category)
+                            if cached:
+                                return cached
 
         # Try preferred tool first
         preferred = self.get_preferred_tool(category)
