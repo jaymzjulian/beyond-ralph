@@ -41,6 +41,52 @@ def block_exit(prompt: str, iteration: int, incomplete: int) -> None:
     sys.exit(0)
 
 
+def _check_quota_api() -> tuple[float | None, float]:
+    """Check quota via Anthropic OAuth usage API (self-contained, no imports).
+
+    Returns:
+        Tuple of (session_percent, weekly_percent). session_percent is None if check failed.
+    """
+    import urllib.request
+    import urllib.error
+
+    creds_file = Path.home() / ".claude" / ".credentials.json"
+    if not creds_file.exists():
+        debug_log("No credentials file - skipping quota check")
+        return None, 0
+
+    try:
+        creds = json.loads(creds_file.read_text())
+        token = creds.get("claudeAiOauth", {}).get("accessToken", "")
+        if not token:
+            return None, 0
+    except Exception:
+        return None, 0
+
+    try:
+        req = urllib.request.Request(
+            "https://api.anthropic.com/api/oauth/usage",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "anthropic-beta": "oauth-2025-04-20",
+            },
+        )
+        resp = urllib.request.urlopen(req, timeout=10)
+        data = json.loads(resp.read().decode())
+    except Exception as e:
+        debug_log(f"Quota API error: {e}")
+        return None, 0
+
+    five_hour = data.get("five_hour", {})
+    seven_day = data.get("seven_day", {})
+    session_pct = float(five_hour.get("utilization", 0) or 0)
+    weekly_pct = float(seven_day.get("utilization", 0) or 0)
+
+    debug_log(f"Quota API: session={session_pct}%, weekly={weekly_pct}%")
+    return session_pct, weekly_pct
+
+
 def _run_audit_gate() -> tuple[bool, str]:
     """Run static audit as a gate before accepting AUTOMATION_COMPLETE.
 
@@ -163,19 +209,42 @@ def main() -> None:
         except Exception as e:
             debug_log(f"Transcript read error: {e}")
 
-    # Check quota
+    # Check quota via API - if limited, block exit and tell Claude to wait for reset
     try:
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-        from beyond_ralph.utils.quota_checker import get_quota_status
-        status = get_quota_status()
-        if not status.is_unknown and (status.session_percent >= 85 or status.weekly_percent >= 85):
-            debug_log(f"Quota limited ({status.session_percent}%/{status.weekly_percent}%) - allowing exit")
-            state["state"] = "paused"
-            state["pause_reason"] = "quota"
+        session_pct, weekly_pct = _check_quota_api()
+        if session_pct is not None and (session_pct >= 85 or weekly_pct >= 85):
+            debug_log(f"Quota limited ({session_pct}%/{weekly_pct}%) - blocking to wait")
+            state["hook_iteration"] = iteration
+            state["state"] = "waiting_for_quota"
+            state["last_activity"] = datetime.now(timezone.utc).isoformat()
             state_file.write_text(json.dumps(state, indent=2))
-            allow_exit()
-    except Exception:
-        pass  # Quota check failure = continue anyway
+            # Block exit with a prompt that tells Claude to wait and recheck
+            quota_prompt = (
+                f"QUOTA LIMITED: session={session_pct}%, weekly={weekly_pct}%.\n"
+                f"You MUST wait for quota to reset before continuing.\n\n"
+                f"Run this Python snippet to poll until quota is available:\n"
+                f"```python\n"
+                f"import time, json, urllib.request\n"
+                f"creds = json.loads(open('{Path.home()}/.claude/.credentials.json').read())\n"
+                f"token = creds['claudeAiOauth']['accessToken']\n"
+                f"while True:\n"
+                f"    time.sleep(600)  # Check every 10 minutes\n"
+                f"    req = urllib.request.Request('https://api.anthropic.com/api/oauth/usage',\n"
+                f"        headers={{'Authorization': f'Bearer {{token}}', 'anthropic-beta': 'oauth-2025-04-20'}})\n"
+                f"    data = json.loads(urllib.request.urlopen(req, timeout=10).read())\n"
+                f"    s = data.get('five_hour', {{}}).get('utilization', 0) or 0\n"
+                f"    w = data.get('seven_day', {{}}).get('utilization', 0) or 0\n"
+                f"    print(f'Quota check: session={{s}}%, weekly={{w}}%')\n"
+                f"    if s < 85 and w < 85:\n"
+                f"        print('Quota available! Resuming...')\n"
+                f"        break\n"
+                f"```\n\n"
+                f"After quota resets, continue with the original task from the state file prompt.\n"
+                f"Do NOT output AUTOMATION_COMPLETE. Do NOT pause. Resume work."
+            )
+            block_exit(quota_prompt, iteration, incomplete)
+    except Exception as e:
+        debug_log(f"Quota check error: {e} - continuing without quota gate")
 
     # Count incomplete tasks
     incomplete = 0

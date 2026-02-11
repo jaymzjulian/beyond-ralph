@@ -3,11 +3,15 @@
 This module provides functionality to check Claude Code usage quotas
 and determine when the system should pause autonomous operations.
 
+Primary method: OAuth API endpoint (fast, reliable, works from hooks).
+Fallback: Interactive CLI pexpect (slow, fragile, for when API is unavailable).
+
 CRITICAL: This module NEVER fakes results. If quota cannot be determined,
 operations MUST be blocked until quota can be verified. Unknown state = blocked.
 """
 
 import json
+import logging
 import os
 import re
 import time
@@ -16,9 +20,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 # Cache file for quota status
 QUOTA_CACHE_FILE = Path(".quota_cache")
 QUOTA_THRESHOLD = 85  # Pause at 85%
+
+# Credentials file location
+CREDENTIALS_FILE = Path.home() / ".claude" / ".credentials.json"
+
+# API endpoint for usage data
+USAGE_API_URL = "https://api.anthropic.com/api/oauth/usage"
 
 
 class QuotaCheckError(Exception):
@@ -102,6 +114,79 @@ def strip_ansi(text: str) -> str:
     """Remove ANSI escape codes from text."""
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     return ansi_escape.sub('', text)
+
+
+def check_quota_via_api() -> QuotaStatus:
+    """Check quota using the Anthropic OAuth usage API.
+
+    This is the PRIMARY and most reliable method. It reads the OAuth token
+    from ~/.claude/.credentials.json and queries the usage API directly.
+
+    Returns:
+        QuotaStatus with current usage levels, or unknown status on failure.
+    """
+    import urllib.request
+    import urllib.error
+
+    # Read credentials
+    if not CREDENTIALS_FILE.exists():
+        return QuotaStatus.unknown("No credentials file at ~/.claude/.credentials.json")
+
+    try:
+        creds = json.loads(CREDENTIALS_FILE.read_text())
+        token = creds.get("claudeAiOauth", {}).get("accessToken", "")
+        if not token:
+            return QuotaStatus.unknown("No accessToken in credentials file")
+    except (json.JSONDecodeError, KeyError) as e:
+        return QuotaStatus.unknown(f"Failed to read credentials: {e}")
+
+    # Query the API
+    try:
+        req = urllib.request.Request(
+            USAGE_API_URL,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "anthropic-beta": "oauth-2025-04-20",
+            },
+        )
+        resp = urllib.request.urlopen(req, timeout=10)
+        data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return QuotaStatus.unknown("OAuth token expired or invalid (HTTP 401)")
+        return QuotaStatus.unknown(f"API error: HTTP {e.code}")
+    except Exception as e:
+        return QuotaStatus.unknown(f"API request failed: {e}")
+
+    # Parse the response
+    # The API returns "five_hour" (session) and "seven_day" (weekly) utilization
+    five_hour = data.get("five_hour", {})
+    seven_day = data.get("seven_day", {})
+
+    session_pct = float(five_hour.get("utilization", 0) or 0)
+    weekly_pct = float(seven_day.get("utilization", 0) or 0)
+
+    # Also check per-model limits if available
+    opus_data = data.get("seven_day_opus")
+    if opus_data and opus_data.get("utilization"):
+        opus_pct = float(opus_data["utilization"])
+        # Use the higher of overall weekly or opus-specific
+        weekly_pct = max(weekly_pct, opus_pct)
+
+    is_limited = session_pct >= QUOTA_THRESHOLD or weekly_pct >= QUOTA_THRESHOLD
+
+    # Extract reset times for display
+    resets_at = five_hour.get("resets_at", "")
+
+    return QuotaStatus(
+        session_percent=session_pct,
+        weekly_percent=weekly_pct,
+        checked_at=datetime.now(),
+        is_limited=is_limited,
+        is_unknown=False,
+        error_message=f"resets_at={resets_at}" if resets_at else "",
+    )
 
 
 def check_quota_via_print_mode() -> QuotaStatus:
@@ -622,8 +707,15 @@ def get_quota_status(force_refresh: bool = False) -> QuotaStatus:
         if cached is not None:
             return cached
 
-    # Use interactive CLI mode to check quota via /usage command
-    # Note: print mode doesn't work because Claude can't introspect its own quota
+    # Primary: Use OAuth API endpoint (fast, reliable, works from hooks)
+    status = check_quota_via_api()
+    if not status.is_unknown:
+        save_quota_cache(status)
+        return status
+
+    logger.debug("API quota check failed (%s), falling back to CLI", status.error_message)
+
+    # Fallback: Use interactive CLI mode to check quota via /usage command
     status = check_quota_via_cli()
 
     # Check for assume OK override (less safe, but useful for testing)
