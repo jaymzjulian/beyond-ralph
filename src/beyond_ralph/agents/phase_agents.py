@@ -540,19 +540,21 @@ class TestingValidationAgent(TrustModelAgent, PhaseAgent):
 
 
 class SpecComplianceAgent(TrustModelAgent):
-    """Spec Compliance Verification Agent.
+    """Adversarial Spec Compliance Verification Agent.
 
-    This agent verifies that the implementation matches the specification.
-    It is SEPARATE from both the implementation agent and testing agent.
+    This agent performs ADVERSARIAL verification that the implementation
+    matches EVERY requirement in the specification. It is SEPARATE from
+    both the implementation agent and testing agent.
 
-    CRITICAL: This agent catches cases where tests pass but the implementation
-    doesn't actually match what was specified. This is a key integrity check.
+    CRITICAL: This agent's job is to FIND FAILURES, not confirm success.
+    It must go requirement-by-requirement and find exact code for each one.
+    Any missing or partial implementation = FAIL. No deferring to "v2".
 
     Trust model: can verify spec compliance, cannot implement or test.
     """
 
     name = "spec_compliance_agent"
-    description = "Verifies implementation matches specification"
+    description = "Adversarial verification that implementation matches spec"
     tools = ["Read", "Grep", "Glob"]
     model = AgentModel.OPUS  # Use most capable model for spec analysis
 
@@ -562,7 +564,7 @@ class SpecComplianceAgent(TrustModelAgent):
     can_review = True  # Can review for spec compliance
 
     async def execute(self, task: AgentTask) -> AgentResult:
-        """Verify implementation matches specification.
+        """Verify implementation matches specification - adversarially.
 
         Expected context:
         - spec_path: Path to the specification
@@ -571,7 +573,7 @@ class SpecComplianceAgent(TrustModelAgent):
         - module: Module being verified
 
         Returns:
-        - AgentResult with compliance status and evidence
+        - AgentResult with per-requirement compliance checklist
         """
         spec_path = task.context.get("spec_path")
         impl_path = task.context.get("implementation_path")
@@ -597,7 +599,7 @@ class SpecComplianceAgent(TrustModelAgent):
 
         impl_content = impl_file.read_text()
 
-        # Analyze compliance
+        # Extract and verify requirements
         compliance_result = self._verify_compliance(
             spec_content=spec_content,
             impl_content=impl_content,
@@ -606,99 +608,192 @@ class SpecComplianceAgent(TrustModelAgent):
 
         if compliance_result["compliant"]:
             return self.succeed(
-                output=f"Implementation of '{module}' is SPEC COMPLIANT",
+                output=(
+                    f"Implementation of '{module}' is SPEC COMPLIANT. "
+                    f"{compliance_result['passed']}/{compliance_result['total']} "
+                    f"requirements verified."
+                ),
                 data={
                     "compliant": True,
                     "module": module,
-                    "evidence": compliance_result["evidence"],
+                    "checklist": compliance_result["checklist"],
+                    "total": compliance_result["total"],
+                    "passed": compliance_result["passed"],
+                    "failed": compliance_result["failed"],
                     "spec_path": str(spec_path),
                     "implementation_path": str(impl_path),
                     "verified_by": self.name,
                 },
             )
         else:
+            failed_items = [
+                item for item in compliance_result["checklist"]
+                if not item["pass"]
+            ]
             return self.fail(
-                f"Implementation of '{module}' does NOT match specification. "
-                f"Issues: {compliance_result['issues']}",
+                f"Implementation of '{module}' FAILS spec compliance. "
+                f"{compliance_result['failed']}/{compliance_result['total']} "
+                f"requirements not met: {[f['id'] for f in failed_items]}",
                 data={
                     "compliant": False,
                     "module": module,
-                    "issues": compliance_result["issues"],
-                    "evidence": compliance_result["evidence"],
+                    "checklist": compliance_result["checklist"],
+                    "total": compliance_result["total"],
+                    "passed": compliance_result["passed"],
+                    "failed": compliance_result["failed"],
+                    "failed_items": failed_items,
                     "spec_path": str(spec_path),
                     "implementation_path": str(impl_path),
                 },
             )
 
+    def _extract_requirements(self, spec_content: str) -> list[dict]:
+        """Extract numbered requirements from specification text.
+
+        Returns:
+            List of dicts with 'id' and 'text' keys.
+        """
+        requirements = []
+        req_num = 0
+
+        for line in spec_content.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            lower = stripped.lower()
+            # Match explicit requirement markers
+            is_requirement = any(marker in lower for marker in [
+                "must ", "shall ", "should ", "required",
+                "- [ ]", "* [ ]", "requirement:", "req:",
+            ])
+            # Match feature descriptions (bullet points with verbs)
+            is_feature = (
+                stripped.startswith(("- ", "* ", "• "))
+                and len(stripped) > 10
+                and any(v in lower for v in [
+                    "support", "implement", "provide", "handle",
+                    "accept", "generate", "emit", "produce",
+                    "parse", "validate", "return", "create",
+                ])
+            )
+
+            if is_requirement or is_feature:
+                req_num += 1
+                requirements.append({
+                    "id": f"REQ-{req_num:03d}",
+                    "text": stripped,
+                })
+
+        return requirements
+
     def _verify_compliance(
         self,
         spec_content: str,
         impl_content: str,
-        task_description: str,
+        task_description: str,  # noqa: ARG002
     ) -> dict:
-        """Verify that implementation matches specification.
+        """Verify that implementation matches specification adversarially.
 
-        This is a structural check - the orchestrator should spawn
-        an actual LLM agent to do deep semantic analysis.
+        Performs structural pre-check. The orchestrator spawns an LLM agent
+        for deep semantic analysis (two-pass: extraction + adversarial check).
 
         Returns:
-            dict with 'compliant', 'evidence', and 'issues' keys
+            dict with 'compliant', 'checklist', 'total', 'passed', 'failed'.
         """
-        evidence = []
-        issues = []
+        requirements = self._extract_requirements(spec_content)
+        checklist: list[dict] = []
 
-        # Extract requirements from spec (lines with specific markers)
-        requirements = []
-        for line in spec_content.split("\n"):
-            line_lower = line.lower().strip()
-            if any(marker in line_lower for marker in [
-                "must ", "shall ", "should ", "required",
-                "- [ ]", "* [ ]", "requirement:", "req:"
-            ]):
-                requirements.append(line.strip())
+        if not requirements:
+            # No extractable requirements = cannot verify
+            return {
+                "compliant": False,
+                "checklist": [{
+                    "id": "REQ-000",
+                    "text": "No requirements found in spec",
+                    "pass": False,
+                    "evidence": "Spec has no extractable requirements",
+                }],
+                "total": 1,
+                "passed": 0,
+                "failed": 1,
+            }
 
-        evidence.append(f"Found {len(requirements)} requirements in specification")
-
-        # Check implementation has expected structure
         impl_lines = impl_content.split("\n")
-        impl_has_code = any(
-            line.strip() and not line.strip().startswith("#")
-            for line in impl_lines
-        )
+        impl_lower = impl_content.lower()
 
-        if not impl_has_code:
-            issues.append("Implementation appears to be empty or only comments")
+        # Check for deferral language (automatic FAIL)
+        deferral_markers = [
+            "defer", "future version", "next version", "v2",
+            "later phase", "out of scope", "nice to have",
+            "placeholder", "simplified version", "good enough",
+        ]
+        has_deferral = any(m in impl_lower for m in deferral_markers)
+        if has_deferral:
+            checklist.append({
+                "id": "DEFERRAL-CHECK",
+                "text": "No deferred/placeholder implementations",
+                "pass": False,
+                "evidence": "Implementation contains deferral language",
+            })
 
-        # Check for function/class definitions
-        has_definitions = any(
-            line.strip().startswith(("def ", "class ", "async def "))
-            for line in impl_lines
-        )
+        # Check each requirement for evidence in implementation
+        for req in requirements:
+            # Extract key terms from requirement
+            req_lower = req["text"].lower()
+            # Look for function/class names that might implement this
+            key_words = [
+                w for w in req_lower.split()
+                if len(w) > 3 and w not in {
+                    "must", "shall", "should", "required",
+                    "with", "that", "this", "from", "have",
+                    "will", "been", "each", "when", "then",
+                    "also", "into", "able", "does", "need",
+                }
+            ]
 
-        if has_definitions:
-            evidence.append("Implementation contains function/class definitions")
-        else:
-            issues.append("No function or class definitions found in implementation")
+            found = any(
+                kw in impl_lower for kw in key_words[:5]
+            )
 
-        # Check for common completeness indicators
-        has_docstrings = '"""' in impl_content or "'''" in impl_content
-        has_error_handling = "except" in impl_content or "raise" in impl_content
+            # Check for empty/stub implementations
+            has_not_implemented = "notimplementederror" in impl_lower
+            has_todo = "todo" in impl_lower or "fixme" in impl_lower
+            has_pass_only = any(
+                line.strip() == "pass" for line in impl_lines
+            )
 
-        if has_docstrings:
-            evidence.append("Implementation has documentation")
-        if has_error_handling:
-            evidence.append("Implementation has error handling")
+            if found and not has_not_implemented:
+                checklist.append({
+                    "id": req["id"],
+                    "text": req["text"],
+                    "pass": True,
+                    "evidence": "Keywords found in implementation",
+                })
+            else:
+                reason = "Not found in implementation"
+                if has_not_implemented:
+                    reason = "Contains NotImplementedError"
+                elif has_todo:
+                    reason = "Contains TODO/FIXME markers"
+                elif has_pass_only:
+                    reason = "Contains empty (pass-only) functions"
+                checklist.append({
+                    "id": req["id"],
+                    "text": req["text"],
+                    "pass": False,
+                    "evidence": reason,
+                })
 
-        # For a real implementation, the orchestrator would spawn an LLM
-        # to do deep semantic analysis of spec vs implementation
-
-        compliant = len(issues) == 0 and len(requirements) > 0
+        passed = sum(1 for c in checklist if c["pass"])
+        failed = sum(1 for c in checklist if not c["pass"])
 
         return {
-            "compliant": compliant,
-            "evidence": evidence,
-            "issues": issues,
-            "requirements_found": len(requirements),
+            "compliant": failed == 0,
+            "checklist": checklist,
+            "total": len(checklist),
+            "passed": passed,
+            "failed": failed,
         }
 
 

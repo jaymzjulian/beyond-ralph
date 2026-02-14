@@ -29,7 +29,7 @@ class Checkbox(Enum):
     MOCK_TESTED = "mock_tested"                  # Unit tests with mocks/stubs pass
     INTEGRATION_TESTED = "integration_tested"    # Module interaction tests pass
     LIVE_TESTED = "live_tested"                  # ACTUAL artifact executed
-    SPEC_COMPLIANT = "spec_compliant"            # Verified by separate agent vs spec
+    SPEC_COMPLIANT = "spec_compliant"            # Adversarial per-requirement check
     AUDIT_VERIFIED = "audit_verified"            # Static analysis + LLM interrogation pass
 
 

@@ -440,6 +440,48 @@ Every feature MUST have all seven checkboxes checked:
 
 **Note**: The Spec Compliant checkbox is verified by a SpecComplianceAgent that is DIFFERENT from both the implementation agent and the testing agent. This catches cases where tests pass but the implementation doesn't match requirements.
 
+### Zero Deferral Principle (CRITICAL - ALL AGENTS MUST FOLLOW)
+
+**There is NO concept of "defer to v2", "future version", "next release", or "out of scope".**
+
+If a requirement exists in the specification, it MUST be fully implemented. Period.
+
+- "Deferred to next version" = **FAIL** (there is no next version - implement it NOW)
+- "Partial implementation" = **FAIL** (the spec doesn't say "partially implement")
+- "Good enough for now" = **FAIL** (it must be COMPLETE, not "good enough")
+- "Placeholder for future work" = **FAIL** (implement the real thing)
+- "Time constraints" = **FAIL** (there ARE no time constraints - take as long as needed)
+- "Nice to have" = **FAIL** (if it's in the spec, it's REQUIRED)
+- "Simplified version" = **FAIL** (implement the SPECIFIED version, not a simplified one)
+
+This principle applies to ALL agents: implementation, testing, review, spec compliance, and audit.
+Any agent that defers work instead of implementing it is FAILING its job.
+
+### What "Spec Compliant" Means (CRITICAL - READ THIS)
+
+"Spec compliant" means a **separate adversarial agent** has verified that EVERY requirement in the specification has a corresponding, complete implementation in the code. This is NOT a rubber stamp.
+
+**The spec compliance agent is an ADVERSARIAL REVIEWER:**
+- Its job is to find ways the implementation FAILS to meet the spec
+- It must go through EVERY requirement and find the exact code that implements it
+- If it cannot point to specific code for a requirement, that requirement FAILS
+- ANY failure = not spec compliant (no partial credit)
+
+**Requirement-by-requirement checklist is MANDATORY:**
+The agent must output a numbered checklist like:
+```
+REQ-001: "System must support X" -> PASS | Implemented in src/foo.py:45-120
+REQ-002: "Must handle Y edge case" -> FAIL | No handling found for Y
+REQ-003: "Support Z format" -> FAIL | Only supports Z1, missing Z2 and Z3
+```
+A single FAIL = Spec Compliant checkbox stays unchecked.
+
+**What does NOT qualify as spec compliant:**
+- "The implementation looks reasonable" (show specific code for EACH requirement)
+- "Most requirements are met" (ALL requirements must be met)
+- "Deferred to v2" (there is no v2 - see Zero Deferral Principle)
+- "The tests pass" (passing tests != matching spec - tests might not cover the spec)
+
 ### What "Live Tested" Means (CRITICAL - READ THIS)
 
 "Live tested" means the **actual compiled/built/deployed artifact** was executed in a realistic scenario and produced correct, observable results. This is NOT another round of unit tests. A **separate agent** from the one that wrote the code must perform live testing.

@@ -813,6 +813,14 @@ REQUIREMENTS:
 5. Add type hints and docstrings to public functions
 6. Commit your changes with descriptive messages
 
+ZERO DEFERRAL POLICY (MANDATORY):
+- You MUST fully implement everything described in the spec for this task
+- Do NOT defer anything to 'v2', 'future work', or 'next version'
+- Do NOT implement a 'simplified version' - implement the SPECIFIED version
+- Do NOT leave placeholders, stubs, or partial implementations
+- There are NO time constraints - take as long as needed to implement fully
+- If the spec says it, you MUST implement it. No exceptions.
+
 After implementation, update records/{task.module}/tasks.md:
 - Mark [x] Planned
 - Mark [x] Implemented
@@ -1042,61 +1050,112 @@ INCOMPLETE_TASKS: (list of tasks missing checkboxes)
                 data={"testing_result": session.result},
             )
 
-        # Tests passed but checkboxes incomplete - try spec compliance check
+        # Tests passed but checkboxes incomplete - run adversarial spec compliance
+
+        # PASS 1: Extract requirements from spec
         if self._enable_streaming:
-            print("[BEYOND-RALPH] Running Spec Compliance check")
+            print("[BEYOND-RALPH] Phase 8.5: Requirement extraction from spec")
 
-        compliance_session = await self.session_manager.spawn(
+        extraction_session = await self.session_manager.spawn(
             use_cli=self.use_cli,
-            max_turns=20,
-            prompt=f"""SPEC COMPLIANCE AGENT: Verify implementation matches specification.
+            max_turns=15,
+            prompt=f"""REQUIREMENT EXTRACTOR: Read the specification at: {self.spec_path}
+Also read the module specs in records/*/spec.md.
 
-You are a SEPARATE agent from both implementers and testers.
-Your job is to verify the implementation matches what was specified.
+Extract EVERY requirement, feature, behavior, constraint, and interface.
+Number them sequentially: REQ-001, REQ-002, etc.
 
-Read the original specification at: {self.spec_path}
-Compare it against the implementation.
+Include ALL of these:
+- Explicit requirements (MUST, SHALL, SHOULD, REQUIRED)
+- Implicit requirements (described behaviors, documented interfaces)
+- Edge cases mentioned in the spec
+- Error handling requirements
+- Performance/quality constraints
+- Integration points and interfaces
 
-For EACH requirement in the spec, verify:
-1. The requirement is implemented
-2. The implementation behaves as specified
-3. Edge cases are handled
-
-Output:
-SPEC_COMPLIANT: true/false
-MISSING_REQUIREMENTS: (list if any)
-DEVIATIONS: (list of spec deviations)
-
-If SPEC_COMPLIANT is true, mark [x] Spec compliant on all tasks.
+Output a numbered list. Do NOT skip anything. Do NOT summarize or combine.
+If in doubt whether something is a requirement, INCLUDE IT.
 {CONTEXT_BUDGET_RULES}""",
             agent_type="validation",
             output_callback=self._stream_output,
         )
 
-        spec_compliant = "SPEC_COMPLIANT: true" in (compliance_session.result or "").lower()
+        requirements_list = extraction_session.result or ""
+
+        # PASS 2: Adversarial compliance check
+        if self._enable_streaming:
+            print("[BEYOND-RALPH] Phase 8.5: Adversarial spec compliance check")
+
+        compliance_session = await self.session_manager.spawn(
+            use_cli=self.use_cli,
+            max_turns=25,
+            prompt=f"""ADVERSARIAL SPEC COMPLIANCE AGENT: Your job is to FIND FAILURES.
+
+You are an ADVERSARIAL reviewer. You are NOT here to confirm the code works.
+You are here to find every way it FAILS to meet the specification.
+
+ZERO DEFERRAL POLICY:
+- 'Deferred to v2' = FAIL (there is no v2)
+- 'Partial implementation' = FAIL
+- 'Simplified version' = FAIL (implement the SPECIFIED version)
+- 'Good enough' = FAIL
+- 'Placeholder' = FAIL
+- There are NO time constraints. Everything in the spec MUST be implemented.
+
+Here are the extracted requirements:
+{requirements_list}
+
+For EACH requirement:
+1. Find the EXACT code that implements it (file:line)
+2. Verify the code ACTUALLY does what the spec says (not just something similar)
+3. Check edge cases mentioned in the spec are handled
+4. Mark PASS only if you can point to complete, working code
+
+Output format (MANDATORY):
+SPEC_COMPLIANCE_RESULT: PASS/FAIL
+TOTAL_REQUIREMENTS: N
+PASSED: N
+FAILED: N
+
+CHECKLIST:
+REQ-001: [spec text] -> PASS/FAIL | [evidence: file:line or reason for failure]
+REQ-002: ...
+
+ANY single FAIL = SPEC_COMPLIANCE_RESULT: FAIL
+Do NOT mark [x] Spec compliant on ANY tasks if there are failures.
+Only mark [x] Spec compliant on ALL tasks if SPEC_COMPLIANCE_RESULT: PASS.
+{CONTEXT_BUDGET_RULES}""",
+            agent_type="validation",
+            output_callback=self._stream_output,
+        )
+
+        result_text = compliance_session.result or ""
+        spec_compliant = "SPEC_COMPLIANCE_RESULT: PASS" in result_text.upper()
 
         if spec_compliant:
             return PhaseResult(
                 success=True,
                 phase=Phase.TESTING,
-                message="All tests and spec compliance passed - project complete",
+                message="All tests and spec compliance passed",
                 next_phase=Phase.COMPLETE,
                 data={
                     "testing_result": session.result,
-                    "compliance_result": compliance_session.result,
+                    "requirements_list": requirements_list,
+                    "compliance_result": result_text,
                 },
             )
 
-        # Spec compliance failed
+        # Spec compliance failed - extract failed requirements for targeted fixes
         return PhaseResult(
             success=True,
             phase=Phase.TESTING,
-            message="Spec compliance check failed - returning to implementation",
+            message="Spec compliance FAILED - returning to implementation",
             should_loop=True,
             loop_to_phase=Phase.IMPLEMENTATION,
             data={
                 "testing_result": session.result,
-                "compliance_result": compliance_session.result,
+                "requirements_list": requirements_list,
+                "compliance_result": result_text,
             },
         )
 

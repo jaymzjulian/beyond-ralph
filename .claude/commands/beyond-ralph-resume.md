@@ -64,9 +64,11 @@ Read `PROJECT_PLAN.md` and cross-reference:
 1. **All spec requirements covered?** - Every MUST/REQUIRED in spec has a task
 2. **All modules accounted for?** - Check `records/*/tasks.md` exist
 3. **Checkboxes accurate?** - Verify claimed completions:
-   - "Implemented" → code actually exists
-   - "Tested" → tests actually pass
-   - "Spec Compliant" → implementation matches spec
+   - "Implemented" → code actually exists (FULLY - no stubs, no partial)
+   - "Tested" → tests actually pass (mock, integration, AND live)
+   - "Spec Compliant" → adversarial per-requirement check passed
+
+**ZERO DEFERRAL POLICY**: If ANY requirement in the spec is marked "deferred to v2", "future work", "simplified version", or similar, that is a FAILURE. There is no v2. There are no time constraints. Everything in the spec MUST be fully implemented.
 
 ## STEP 6: Identify Gaps
 Compare spec requirements vs actual state:
@@ -128,8 +130,14 @@ When spawning agents via the Task tool, ALWAYS:
 
 2. **One agent per TASK, not per MODULE** - large modules MUST be broken into individual tasks
 
-3. **Include CONTEXT BUDGET RULES in every prompt**:
+3. **Include CONTEXT BUDGET RULES and ZERO DEFERRAL POLICY in every prompt**:
 ```
+ZERO DEFERRAL POLICY (MANDATORY):
+- You MUST fully implement everything described in the spec for this task
+- Do NOT defer anything to 'v2', 'future work', or 'next version'
+- Do NOT implement a 'simplified version' - implement the SPECIFIED version
+- There are NO time constraints - take as long as needed to implement fully
+
 CONTEXT BUDGET RULES:
 - Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)
 - Read only the functions/sections you need to modify

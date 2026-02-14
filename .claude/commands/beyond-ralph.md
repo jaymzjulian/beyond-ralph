@@ -74,6 +74,14 @@ Task(
     max_turns=25,
     prompt="Implement [specific task] per records/[module]/spec.md using TDD.
 
+ZERO DEFERRAL POLICY (MANDATORY):
+- You MUST fully implement everything described in the spec for this task
+- Do NOT defer anything to 'v2', 'future work', or 'next version'
+- Do NOT implement a 'simplified version' - implement the SPECIFIED version
+- Do NOT leave placeholders, stubs, or partial implementations
+- There are NO time constraints - take as long as needed to implement fully
+- If the spec says it, you MUST implement it. No exceptions.
+
 CONTEXT BUDGET RULES:
 - Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)
 - Read only the functions/sections you need to modify
@@ -137,7 +145,78 @@ and recorded evidence of correct output.
 DO NOT mark it just because tests pass - that is Mock/Integration tested.")
 ```
 - If any stage fails, loop back to Phase 7 for fixes (targeted fix agent)
-- **When ALL stages pass (including live testing), proceed to Phase 9**
+- **When ALL stages pass (including live testing), proceed to Phase 8.5**
+
+### Phase 8.5: SPEC_COMPLIANCE (Adversarial Verification - MANDATORY)
+
+A SEPARATE agent (NOT the implementer, NOT the tester) performs an **adversarial** review of the implementation against the specification. This agent's job is to FIND GAPS, not confirm success.
+
+**Two-pass verification:**
+
+**Pass 1: Requirement Extraction** (max_turns=15)
+```
+Task(max_turns=15, prompt="REQUIREMENT EXTRACTOR: Read the specification at [spec_path].
+
+Extract EVERY requirement, feature, behavior, constraint, and interface mentioned.
+Number them sequentially: REQ-001, REQ-002, etc.
+
+Include ALL of these:
+- Explicit requirements (MUST, SHALL, SHOULD, REQUIRED)
+- Implicit requirements (described behaviors, documented interfaces)
+- Edge cases mentioned in the spec
+- Error handling requirements
+- Performance/quality constraints
+- Integration points and interfaces
+
+Output a numbered list. Do NOT skip anything. Do NOT summarize or combine requirements.
+If in doubt whether something is a requirement, INCLUDE IT.
+
+CONTEXT BUDGET RULES: [...]")
+```
+
+**Pass 2: Adversarial Compliance Check** (max_turns=25)
+```
+Task(max_turns=25, prompt="ADVERSARIAL SPEC COMPLIANCE AGENT: Your job is to FIND FAILURES.
+
+You are an ADVERSARIAL reviewer. You are NOT here to confirm the code works.
+You are here to find every way it FAILS to meet the specification.
+
+ZERO DEFERRAL POLICY:
+- 'Deferred to v2' = FAIL (there is no v2)
+- 'Partial implementation' = FAIL
+- 'Simplified version' = FAIL (implement the SPECIFIED version)
+- 'Good enough' = FAIL
+- 'Placeholder' = FAIL
+- There are NO time constraints. Everything in the spec MUST be implemented.
+
+For EACH requirement in the extracted list:
+1. Find the EXACT code that implements it (file:line)
+2. Verify the code ACTUALLY implements what the spec says (not just something similar)
+3. Check edge cases mentioned in the spec are handled
+4. Mark PASS only if you can point to complete, working code
+
+Output format (MANDATORY - use this EXACT format):
+```
+SPEC_COMPLIANCE_RESULT: PASS/FAIL
+TOTAL_REQUIREMENTS: N
+PASSED: N
+FAILED: N
+
+CHECKLIST:
+REQ-001: [spec text] -> PASS | src/foo.py:45-120
+REQ-002: [spec text] -> FAIL | Not found in codebase
+REQ-003: [spec text] -> FAIL | Only partial - missing X and Y
+...
+```
+
+ANY single FAIL = SPEC_COMPLIANCE_RESULT: FAIL
+Do NOT mark Spec Compliant on any tasks if there are failures.
+
+CONTEXT BUDGET RULES: [...]")
+```
+
+- If SPEC_COMPLIANCE_RESULT is FAIL, loop back to Phase 7 with the specific FAILED requirements
+- **When ALL requirements pass, proceed to Phase 9**
 
 ### Phase 9: IMPLEMENTATION_AUDIT
 Two-pronged audit to catch stubs, fakes, and TODOs:
@@ -216,11 +295,11 @@ Task(max_turns=15, prompt="Write tests for 6502 register allocator. Test file: t
 
 Every task in `records/[module]/tasks.md` needs:
 - [ ] Planned - design documented
-- [ ] Implemented - code written
+- [ ] Implemented - code written (FULLY - no stubs, no "deferred to v2", no partial implementations)
 - [ ] Mock Tested - unit tests with mocks/stubs pass (no external deps)
 - [ ] Integration Tested - tests verifying module interactions pass
 - [ ] Live Tested - ACTUAL ARTIFACT EXECUTED with correct results (NOT more tests - build it, run it, verify it). Must be done by a SEPARATE agent from the implementer.
-- [ ] Spec Compliant - verified by SEPARATE agent reading spec vs implementation
+- [ ] Spec Compliant - ADVERSARIAL agent verified EVERY requirement has matching code (per-requirement checklist with file:line evidence). ANY unimplemented requirement = FAIL.
 - [ ] Audit Verified - verified by static analysis + LLM interrogation (no stubs/fakes)
 
 ## Completion Check
