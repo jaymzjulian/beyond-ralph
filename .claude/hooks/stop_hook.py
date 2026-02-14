@@ -132,10 +132,16 @@ def main() -> None:
 
     br_state = state.get("state", "unknown")
 
-    # Terminal states - allow exit, BUT verify incomplete tasks first
-    terminal_states = ("complete", "done", "finished", "stopped", "cancelled", "error")
-    if br_state in terminal_states:
-        # Safety net: if records show incomplete tasks, the state file is wrong
+    # User-requested stop states - always respect these (never override)
+    user_stop_states = ("stopped", "cancelled", "error")
+    if br_state in user_stop_states:
+        debug_log(f"User-requested stop ({br_state}) - allowing exit")
+        allow_exit()
+
+    # Auto-completion states - verify against actual task records
+    auto_complete_states = ("complete", "done", "finished")
+    if br_state in auto_complete_states:
+        # Safety net: if records show incomplete tasks, the auto-completion is wrong
         actual_incomplete = 0
         records_dir = Path("records")
         if records_dir.exists():
