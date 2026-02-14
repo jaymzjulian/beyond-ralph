@@ -310,11 +310,14 @@ def main() -> None:
     # Get the stored prompt to re-feed (like ralph-wiggum's PROMPT_TEXT)
     prompt = state.get("prompt", "")
 
-    # SAFETY: If stored prompt contains AUTOMATION_COMPLETE or is clearly stale,
-    # discard it and use the fallback. A prompt saying "all done" while tasks
-    # remain would cause Claude to immediately re-declare completion.
-    if "AUTOMATION_COMPLETE" in prompt or "All planned work is done" in prompt:
-        debug_log("Stored prompt is stale (contains completion marker) - using fallback")
+    # SAFETY: If stored prompt is a stale DECLARATION of completion, discard it.
+    # But DON'T discard prompts that merely INSTRUCT Claude to "Output AUTOMATION_COMPLETE
+    # when done" - those are valid orchestrator prompts.
+    # A stale prompt looks like "AUTOMATION_COMPLETE. All planned work is done."
+    # A valid prompt looks like "Output AUTOMATION_COMPLETE only when all N tasks are done."
+    stale_markers = ["All planned work is done", "AUTOMATION_COMPLETE."]
+    if any(marker in prompt for marker in stale_markers):
+        debug_log("Stored prompt is stale (contains completion declaration) - using fallback")
         prompt = ""
 
     if not prompt:
