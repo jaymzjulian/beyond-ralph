@@ -132,11 +132,27 @@ def main() -> None:
 
     br_state = state.get("state", "unknown")
 
-    # Terminal states - allow exit
+    # Terminal states - allow exit, BUT verify incomplete tasks first
     terminal_states = ("complete", "done", "finished", "stopped", "cancelled", "error")
     if br_state in terminal_states:
-        debug_log(f"Terminal state ({br_state}) - allowing exit")
-        allow_exit()
+        # Safety net: if records show incomplete tasks, the state file is wrong
+        actual_incomplete = 0
+        records_dir = Path("records")
+        if records_dir.exists():
+            for tf in records_dir.glob("*/tasks.md"):
+                try:
+                    actual_incomplete += tf.read_text().count("[ ]")
+                except Exception:
+                    continue
+        if actual_incomplete > 0:
+            debug_log(f"State says '{br_state}' but {actual_incomplete} tasks still incomplete - overriding to running")
+            state["state"] = "running"
+            br_state = "running"
+            state_file.write_text(json.dumps(state, indent=2))
+            # Fall through to normal processing below
+        else:
+            debug_log(f"Terminal state ({br_state}) - allowing exit")
+            allow_exit()
 
     # Human wait states - allow exit
     human_wait_states = ("waiting_for_human", "awaiting_input", "blocked_on_user", "needs_human")
@@ -171,10 +187,29 @@ def main() -> None:
                 except (json.JSONDecodeError, KeyError):
                     continue
 
-            if "AUTOMATION_COMPLETE" in last_text:
-                debug_log("Found AUTOMATION_COMPLETE - running audit gate...")
+            # Check if Claude intentionally declared completion.
+            # Must be a standalone declaration, NOT just mentioning the phrase
+            # in instructions like "Output AUTOMATION_COMPLETE when done".
+            # Look for it at the start of a line or as a standalone statement.
+            is_real_completion = False
+            for text_line in last_text.split("\n"):
+                stripped = text_line.strip()
+                # Must START with AUTOMATION_COMPLETE (not "Output AUTOMATION_COMPLETE")
+                if stripped.startswith("AUTOMATION_COMPLETE"):
+                    is_real_completion = True
+                    break
+
+            if is_real_completion:
+                debug_log("Found AUTOMATION_COMPLETE declaration - running audit gate...")
                 # AUDIT GATE: Run static analysis before accepting completion
                 audit_passed, audit_summary = _run_audit_gate()
+
+                # Don't trust "skipped" audits - only trust real passes
+                if "skipped" in audit_summary.lower() or "not available" in audit_summary.lower():
+                    debug_log("Audit gate skipped (module not available) - not trusting")
+                    audit_passed = False
+                    audit_summary = "Audit module not available - cannot verify completion"
+
                 if not audit_passed:
                     debug_log(f"Audit gate BLOCKED completion: {audit_summary}")
                     # Don't allow exit - force continuation with audit findings
@@ -208,6 +243,16 @@ def main() -> None:
                 allow_exit()
         except Exception as e:
             debug_log(f"Transcript read error: {e}")
+
+    # Count incomplete tasks (needed before quota check for block_exit)
+    incomplete = 0
+    records_dir = Path("records")
+    if records_dir.exists():
+        for tf in records_dir.glob("*/tasks.md"):
+            try:
+                incomplete += tf.read_text().count("[ ]")
+            except Exception:
+                continue
 
     # Check quota via API - if limited, block exit and tell Claude to wait for reset
     try:
@@ -246,16 +291,7 @@ def main() -> None:
     except Exception as e:
         debug_log(f"Quota check error: {e} - continuing without quota gate")
 
-    # Count incomplete tasks
-    incomplete = 0
-    records_dir = Path("records")
-    if records_dir.exists():
-        for tf in records_dir.glob("*/tasks.md"):
-            try:
-                incomplete += tf.read_text().count("[ ]")
-            except Exception:
-                continue
-
+    # incomplete was already counted above (before quota check)
     if incomplete == 0:
         debug_log("All tasks complete - allowing exit")
         state["state"] = "complete"
@@ -274,10 +310,20 @@ def main() -> None:
     # Get the stored prompt to re-feed (like ralph-wiggum's PROMPT_TEXT)
     prompt = state.get("prompt", "")
 
+    # SAFETY: If stored prompt contains AUTOMATION_COMPLETE or is clearly stale,
+    # discard it and use the fallback. A prompt saying "all done" while tasks
+    # remain would cause Claude to immediately re-declare completion.
+    if "AUTOMATION_COMPLETE" in prompt or "All planned work is done" in prompt:
+        debug_log("Stored prompt is stale (contains completion marker) - using fallback")
+        prompt = ""
+
     if not prompt:
         # Fallback: build a prompt from state if none was stored
         phase = state.get("phase", "unknown")
-        spec_path = state.get("spec_path", "")
+        # Don't use "complete" as phase in the prompt - it confuses Claude
+        if phase in ("complete", "done", "finished"):
+            phase = "IMPLEMENTATION"
+        spec_path = state.get("spec_path", state.get("spec_file", "SPEC.md"))
         prompt = f"""You are the Beyond Ralph Orchestrator. You have {incomplete} incomplete tasks.
 
 Read records/*/tasks.md to find incomplete tasks ([ ] checkboxes).
@@ -288,6 +334,10 @@ Continue until ALL tasks have 7/7 checkboxes.
 Phase: {phase} | Spec: {spec_path}
 
 Output AUTOMATION_COMPLETE only when all {incomplete} remaining tasks are done."""
+        # Save the corrected prompt so future iterations use it
+        state["prompt"] = prompt
+        state["phase"] = phase
+        state_file.write_text(json.dumps(state, indent=2))
 
     block_exit(prompt, iteration, incomplete)
 

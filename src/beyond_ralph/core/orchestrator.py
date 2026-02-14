@@ -19,6 +19,18 @@ from beyond_ralph.core.session_manager import SessionOutput, SessionStatus, get_
 
 logger = logging.getLogger(__name__)
 
+# Boilerplate appended to every agent prompt to prevent context exhaustion
+CONTEXT_BUDGET_RULES = """
+
+CONTEXT BUDGET RULES (MANDATORY):
+- Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)
+- Read only the functions/sections you need to modify
+- Do NOT explore the whole codebase - focus ONLY on your specific task
+- If a file is large, read only the relevant section using offset/limit
+- Write targeted changes, not full file rewrites
+- Limit yourself to the files directly related to your task
+"""
+
 
 class Phase(Enum):
     """Project phases in the Spec and Interview Coder methodology."""
@@ -482,6 +494,7 @@ class Orchestrator:
         self._log_phase_transition(Phase.IDLE, Phase.SPEC_INGESTION)
         session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=15,
             prompt=f"""Analyze the specification at {self.spec_path} and identify:
 1. Key features and requirements (list each one)
 2. Technologies mentioned or implied
@@ -526,6 +539,7 @@ Read the spec file and provide a structured analysis.""",
         # Spawn interview agent
         session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=15,
             prompt="""Conduct a thorough interview with the user about the project requirements.
 
 Use AskUserQuestion to gather information about:
@@ -571,6 +585,7 @@ This is the ONLY approval gate - after this phase, the system operates autonomou
 
         session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=20,
             prompt=f"""Create a complete modular specification based on:
 1. The original specification at {self.spec_path}
 2. The interview decisions recorded in the knowledge base
@@ -609,6 +624,7 @@ Also create a MODULAR_SPEC.md in the project root summarizing all modules.""",
 
         session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=20,
             prompt="""Create a detailed project plan with:
 1. Implementation order based on module dependencies
 2. Milestones for each phase
@@ -647,6 +663,7 @@ Update the PROJECT_PLAN.md with the overall timeline and milestones.""",
 
         session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=15,
             prompt="""Review the specification and project plan for any uncertainties, ambiguities, or missing information.
 
 Check:
@@ -704,6 +721,7 @@ Output format:
 
         session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=15,
             prompt="""Validate the project plan as a SEPARATE agent (you did not create it).
 
 Check:
@@ -781,6 +799,7 @@ If VALID is false, the plan needs to be revised.""",
             print(f"[BEYOND-RALPH] Spawning Coding Agent for: {task.name}")
         coding_session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=25,
             prompt=f"""CODING AGENT: Implement the following task using TDD.
 
 Task: {task.name}
@@ -798,7 +817,8 @@ After implementation, update records/{task.module}/tasks.md:
 - Mark [x] Planned
 - Mark [x] Implemented
 
-Output what files you created/modified.""",
+Output what files you created/modified.
+{CONTEXT_BUDGET_RULES}""",
             agent_type="implementation",
             output_callback=self._stream_output,
         )
@@ -816,6 +836,7 @@ Output what files you created/modified.""",
             print(f"[BEYOND-RALPH] Spawning Testing Agent for: {task.name}")
         testing_session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=20,
             prompt=f"""TESTING AGENT: Validate the implementation of: {task.name}
 
 You are a SEPARATE agent - you did NOT write this code.
@@ -836,7 +857,8 @@ If tests PASS:
 - Output TESTS_PASSED: true
 - Update records/{task.module}/tasks.md:
   - Mark [x] Mock tested
-  - Mark [x] Integration tested (if applicable)""",
+  - Mark [x] Integration tested (if applicable)
+{CONTEXT_BUDGET_RULES}""",
             agent_type="testing",
             output_callback=self._stream_output,
         )
@@ -857,6 +879,7 @@ If tests PASS:
             print(f"[BEYOND-RALPH] Spawning Review Agent for: {task.name}")
         review_session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=20,
             prompt=f"""CODE REVIEW AGENT: Review the implementation of: {task.name}
 
 You are a SEPARATE agent - you did NOT write or test this code.
@@ -874,7 +897,8 @@ MUST_FIX: (list of items that MUST be fixed)
 SUGGESTIONS: (optional improvements)
 
 The Coding Agent MUST fix all MUST_FIX items before proceeding.
-If REVIEW_PASSED is false, this task cannot be marked complete.""",
+If REVIEW_PASSED is false, this task cannot be marked complete.
+{CONTEXT_BUDGET_RULES}""",
             agent_type="review",
             output_callback=self._stream_output,
         )
@@ -899,6 +923,7 @@ If REVIEW_PASSED is false, this task cannot be marked complete.""",
             # Spawn coding agent again to fix issues
             fix_session = await self.session_manager.spawn(
                 use_cli=self.use_cli,
+                max_turns=20,
                 prompt=f"""CODING AGENT: Fix the following review issues for {task.name}
 
 Review findings:
@@ -906,7 +931,8 @@ Review findings:
 
 You MUST fix ALL items listed under MUST_FIX.
 Do not skip any items. Do not argue with the reviewer.
-Fix each issue and run tests to verify the fix doesn't break anything.""",
+Fix each issue and run tests to verify the fix doesn't break anything.
+{CONTEXT_BUDGET_RULES}""",
                 agent_type="implementation",
                 output_callback=self._stream_output,
             )
@@ -947,6 +973,7 @@ Fix each issue and run tests to verify the fix doesn't break anything.""",
         # Run full integration tests
         session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=25,
             prompt="""FINAL TESTING: Run all integration and live tests.
 
 REQUIREMENTS:
@@ -965,7 +992,8 @@ Output:
 ALL_TESTS_PASSED: true/false
 COVERAGE: percentage
 FAILED_TESTS: (list if any)
-INCOMPLETE_TASKS: (list of tasks missing checkboxes)""",
+INCOMPLETE_TASKS: (list of tasks missing checkboxes)
+{CONTEXT_BUDGET_RULES}""",
             agent_type="testing",
             output_callback=self._stream_output,
         )
@@ -1009,6 +1037,7 @@ INCOMPLETE_TASKS: (list of tasks missing checkboxes)""",
 
         compliance_session = await self.session_manager.spawn(
             use_cli=self.use_cli,
+            max_turns=20,
             prompt=f"""SPEC COMPLIANCE AGENT: Verify implementation matches specification.
 
 You are a SEPARATE agent from both implementers and testers.
@@ -1027,7 +1056,8 @@ SPEC_COMPLIANT: true/false
 MISSING_REQUIREMENTS: (list if any)
 DEVIATIONS: (list of spec deviations)
 
-If SPEC_COMPLIANT is true, mark [x] Spec compliant on all tasks.""",
+If SPEC_COMPLIANT is true, mark [x] Spec compliant on all tasks.
+{CONTEXT_BUDGET_RULES}""",
             agent_type="validation",
             output_callback=self._stream_output,
         )
@@ -1125,6 +1155,7 @@ If SPEC_COMPLIANT is true, mark [x] Spec compliant on all tasks.""",
 
             interrogation_session = await self.session_manager.spawn(
                 use_cli=self.use_cli,
+                max_turns=20,
                 prompt=f"""IMPLEMENTATION AUDIT AGENT: You are a SEPARATE agent auditing module '{module}'.
 
 Your job is to determine if the implementation is REAL or FAKED.
@@ -1144,7 +1175,8 @@ FAKED_ITEMS: (list of faked/stub implementations with file:line)
 REAL_ITEMS: (count of verified real implementations)
 CONCERNS: (any other concerns)
 
-If AUDIT_PASSED is false, list EVERY faked item so it can be fixed.""",
+If AUDIT_PASSED is false, list EVERY faked item so it can be fixed.
+{CONTEXT_BUDGET_RULES}""",
                 agent_type="validation",
                 output_callback=self._stream_output,
             )

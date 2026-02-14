@@ -214,6 +214,7 @@ class SessionManager:
         prompt: str,
         agent_type: str = "general",
         timeout: int = 3600,
+        max_turns: int = 25,
         output_callback: Callable[[SessionOutput], None] | None = None,
         working_dir: Path | None = None,
     ) -> SessionInfo:
@@ -226,6 +227,7 @@ class SessionManager:
             prompt: The task prompt for the agent.
             agent_type: Type of agent to spawn.
             timeout: Timeout in seconds.
+            max_turns: Maximum agentic turns before stopping (prevents context exhaustion).
             output_callback: Callback for streaming output (for [AGENT:id] prefixing).
             working_dir: Working directory for the session.
 
@@ -270,6 +272,8 @@ class SessionManager:
             cmd_args = [claude_path]
             if not self.safemode:
                 cmd_args.append("--dangerously-skip-permissions")
+            if max_turns > 0:
+                cmd_args.extend(["--max-turns", str(max_turns)])
             cmd_args.extend(["-p", prompt])
 
             logger.info(f"[BEYOND-RALPH] Spawning session {session_uuid} ({agent_type})")
@@ -404,6 +408,7 @@ class SessionManager:
         prompt: str,
         agent_type: str = "general",
         timeout: int = 3600,
+        max_turns: int = 25,
         use_cli: bool = False,
         output_callback: Callable[[SessionOutput], None] | None = None,
         working_dir: Path | None = None,
@@ -418,6 +423,7 @@ class SessionManager:
             prompt: The task prompt for the agent.
             agent_type: Type of agent to spawn.
             timeout: Timeout in seconds.
+            max_turns: Maximum agentic turns before stopping (prevents context exhaustion).
             use_cli: If True, use CLI spawning instead of Task tool.
             output_callback: Callback for streaming output.
             working_dir: Working directory for the session.
@@ -434,6 +440,7 @@ class SessionManager:
                 prompt=prompt,
                 agent_type=agent_type,
                 timeout=timeout,
+                max_turns=max_turns,
                 output_callback=output_callback,
                 working_dir=working_dir,
             )

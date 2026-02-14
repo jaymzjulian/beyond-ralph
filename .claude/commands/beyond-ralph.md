@@ -67,19 +67,47 @@ Task(subagent_type="Plan", prompt="Validate the project plan in PROJECT_PLAN.md.
 - **THEN IMMEDIATELY proceed to Phase 7**
 
 ### Phase 7: IMPLEMENTATION
-For EACH module, spawn implementation agent:
+For EACH incomplete task (NOT entire modules), spawn a targeted agent:
 ```
-Task(subagent_type="general-purpose", prompt="Implement [module] per records/[module]/spec.md using TDD...")
+Task(
+    subagent_type="general-purpose",
+    max_turns=25,
+    prompt="Implement [specific task] per records/[module]/spec.md using TDD.
+
+CONTEXT BUDGET RULES:
+- Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)
+- Read only the functions/sections you need to modify
+- Do NOT explore the whole codebase - focus ONLY on your specific task
+- If a file is large, read only the relevant section using offset/limit
+- Write targeted changes, not full file rewrites
+- Limit yourself to the files directly related to your task
+
+Update records/[module]/tasks.md checkboxes when done."
+)
 ```
+
+**CRITICAL: One agent per TASK, not per MODULE.** Large modules MUST be broken into individual tasks. If a single agent tries to implement an entire large module, it WILL exhaust its context window and die.
+
 - Track progress in `records/[module]/tasks.md`
-- **After ALL modules implemented, proceed to Phase 8**
+- **After ALL tasks implemented, proceed to Phase 8**
 
 ### Phase 8: TESTING
-Spawn SEPARATE testing agents:
+Spawn SEPARATE testing agents per task (NOT per module):
 ```
-Task(subagent_type="general-purpose", prompt="Test [module] - run unit, integration tests...")
+Task(
+    subagent_type="general-purpose",
+    max_turns=20,
+    prompt="Test [specific task] - run relevant unit and integration tests.
+
+CONTEXT BUDGET RULES:
+- Use Grep/Glob to find test files - do NOT read entire source files
+- Run only the tests relevant to this specific task
+- Report results concisely
+
+Update records/[module]/tasks.md checkboxes when done."
+)
 ```
-- If tests fail, loop back to Phase 7 for fixes
+- If tests fail, loop back to Phase 7 for fixes (targeted fix agent)
 - **When ALL tests pass, proceed to Phase 9**
 
 ### Phase 9: IMPLEMENTATION_AUDIT
@@ -90,7 +118,8 @@ Two-pronged audit to catch stubs, fakes, and TODOs:
 - If CRITICAL or HIGH findings exist, loop back to Phase 7
 
 **Prong 2: LLM Interrogation** (thorough, semantic)
-- For EACH module, spawn a SEPARATE audit agent that reads spec + code
+- For EACH module, spawn a SEPARATE audit agent (max_turns=20) that reads spec + code
+- Include CONTEXT BUDGET RULES in the prompt (use Grep to search, don't read entire files)
 - Ask point-blank: "Is this implementation REAL or FAKED?"
 - The LLM knows when it faked something and will admit it under direct questioning
 - If any fakes found, loop back to Phase 7
@@ -104,13 +133,54 @@ Use the **Task tool** with appropriate subagent_type:
 - `"general-purpose"` - For implementation and testing
 - `"Explore"` - For codebase research
 
+**CRITICAL: Always set `max_turns` to prevent context exhaustion.**
+Child agents have limited context windows. If they try to do too much, they fill their context and die. Set `max_turns` based on task complexity.
+
+| Task Type | max_turns |
+|-----------|-----------|
+| Single function/file | 15 |
+| Small module (<500 lines) | 25 |
+| Medium module (500-2000 lines) | 30 |
+| Large module (2000+ lines) | **BREAK INTO SUBTASKS** |
+| Testing/validation | 20 |
+| Planning/review | 15 |
+
 Example:
 ```
 Task(
     subagent_type="general-purpose",
+    max_turns=25,
     prompt="Implement the auth module per records/auth/spec.md. Use TDD. Update records/auth/tasks.md checkboxes.",
     description="Implement auth module"
 )
+```
+
+### Context-Efficient Agent Prompts (MANDATORY)
+
+Every agent prompt MUST include these instructions to prevent context exhaustion:
+
+```
+CONTEXT BUDGET RULES:
+- Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)
+- Read only the functions/sections you need to modify
+- Do NOT explore the whole codebase - focus on your specific task
+- If a file is large, read only the relevant section using offset/limit
+- Write targeted changes, not full file rewrites
+- Limit yourself to the files directly related to your task
+```
+
+### Breaking Large Modules Into Subtasks
+
+If a module has more than ~2000 lines or 5+ tasks, DO NOT spawn one agent for the whole module. Instead, spawn one agent per task/function group:
+
+```
+# WRONG - agent will exhaust context
+Task(prompt="Implement the entire backend_6502 module (5000 lines)...")
+
+# CORRECT - targeted per-task agents
+Task(max_turns=20, prompt="Implement the register allocator for 6502 backend. File: src/backend_6502/regalloc.rs...")
+Task(max_turns=20, prompt="Implement the instruction selector for 6502 backend. File: src/backend_6502/isel.rs...")
+Task(max_turns=15, prompt="Write tests for 6502 register allocator. Test file: tests/backend_6502/test_regalloc.rs...")
 ```
 
 ## Task Checkboxes (7 per task)
