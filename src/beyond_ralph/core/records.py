@@ -1,11 +1,11 @@
 """Records System for Beyond Ralph.
 
 Handles task tracking with 7 checkboxes per task:
-- Planned
-- Implemented
-- Mock tested
-- Integration tested
-- Live tested
+- Planned - design documented
+- Implemented - code written
+- Mock tested - unit tests with mocks/stubs pass (no external deps)
+- Integration tested - tests verifying module interactions pass
+- Live tested - ACTUAL built artifact executed with correct results (NOT more tests)
 - Spec Compliant (verified by separate agent that implementation matches spec)
 - Audit Verified (verified by static analysis + LLM interrogation for stubs/fakes)
 """
@@ -24,13 +24,13 @@ DEFAULT_RECORDS_PATH = Path("records")
 class Checkbox(Enum):
     """Task completion checkboxes."""
 
-    PLANNED = "planned"
-    IMPLEMENTED = "implemented"
-    MOCK_TESTED = "mock_tested"
-    INTEGRATION_TESTED = "integration_tested"
-    LIVE_TESTED = "live_tested"
-    SPEC_COMPLIANT = "spec_compliant"  # Verified by separate agent
-    AUDIT_VERIFIED = "audit_verified"  # Verified by static analysis + LLM interrogation
+    PLANNED = "planned"                        # Design documented
+    IMPLEMENTED = "implemented"                  # Code written
+    MOCK_TESTED = "mock_tested"                  # Unit tests with mocks/stubs pass
+    INTEGRATION_TESTED = "integration_tested"    # Module interaction tests pass
+    LIVE_TESTED = "live_tested"                  # ACTUAL artifact executed
+    SPEC_COMPLIANT = "spec_compliant"            # Verified by separate agent vs spec
+    AUDIT_VERIFIED = "audit_verified"            # Static analysis + LLM interrogation pass
 
 
 CHECKBOX_LABELS = {

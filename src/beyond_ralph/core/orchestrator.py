@@ -974,22 +974,33 @@ Fix each issue and run tests to verify the fix doesn't break anything.
         session = await self.session_manager.spawn(
             use_cli=self.use_cli,
             max_turns=25,
-            prompt="""FINAL TESTING: Run all integration and live tests.
+            prompt=f"""FINAL TESTING: Three distinct stages. Do NOT conflate them.
 
-REQUIREMENTS:
-1. Run full test suite: pytest tests/ -v
-2. Check coverage meets threshold: pytest --cov
-3. Run any live tests against real endpoints
-4. Verify the complete system works as specified in the original spec
-5. Check all modules integrate correctly
+STAGE 1 - MOCK + INTEGRATION TESTS:
+Run the project's test suite (pytest / cargo test / npm test as appropriate).
+Mark [x] Mock tested and [x] Integration tested for tasks whose tests pass.
 
-For each task in records/*/tasks.md:
-- Verify tests pass: mark [x] Mock tested, [x] Integration tested
-- If live testing passed: mark [x] Live tested
-- If all previous checks pass: mark [x] Spec compliant
+STAGE 2 - LIVE TESTING (CRITICAL - THIS IS NOT MORE UNIT TESTS):
+You must ACTUALLY BUILD AND RUN the real artifact:
+1. Build the project (cargo build / python -m build / npm run build)
+2. Run the ACTUAL BUILT ARTIFACT with real inputs (not test harnesses)
+3. Verify the output is correct
+4. Record the exact command and output as evidence in records/*/tasks.md
+
+Examples of what qualifies as Live Testing:
+- Compiler: compile a real source file, run the output binary, verify results
+- API: start the server, curl an endpoint, check response body
+- CLI: run the binary with real args, verify stdout/stderr
+
+DO NOT mark [x] Live tested just because unit/integration tests pass.
+Live tested means the ACTUAL ARTIFACT was executed outside of test harnesses.
+
+STAGE 3 - RESULTS:
+For each task in records/*/tasks.md, update checkboxes based on what ACTUALLY passed.
 
 Output:
 ALL_TESTS_PASSED: true/false
+LIVE_TESTS_PASSED: true/false (did you actually build and run the artifact?)
 COVERAGE: percentage
 FAILED_TESTS: (list if any)
 INCOMPLETE_TASKS: (list of tasks missing checkboxes)

@@ -431,14 +431,35 @@ Every feature MUST have all seven checkboxes checked:
 ```markdown
 - [x] Planned - design documented
 - [x] Implemented - code written
-- [x] Mock tested - unit tests pass
-- [x] Integration tested - integration tests pass
-- [x] Live tested - works in real Claude Code environment
+- [x] Mock tested - unit tests with mocks/stubs pass (no external deps)
+- [x] Integration tested - tests verifying module interactions pass (may use test fixtures)
+- [x] Live tested - the ACTUAL BUILT ARTIFACT was executed and produced correct results (NOT just writing more tests - see below)
 - [x] Spec compliant - verified by SEPARATE agent that implementation matches spec
 - [x] Audit verified - verified by static analysis + LLM interrogation (no stubs/fakes/TODOs)
 ```
 
 **Note**: The Spec Compliant checkbox is verified by a SpecComplianceAgent that is DIFFERENT from both the implementation agent and the testing agent. This catches cases where tests pass but the implementation doesn't match requirements.
+
+### What "Live Tested" Means (CRITICAL - READ THIS)
+
+"Live tested" means the **actual compiled/built/deployed artifact** was executed in a realistic scenario and produced correct, observable results. This is NOT another round of unit tests. A **separate agent** from the one that wrote the code must perform live testing.
+
+**What QUALIFIES as Live Tested:**
+- Compiler project: compile a real program with the compiler, run the output binary, verify it produces correct results
+- API project: start the actual server, hit real endpoints with curl/httpx, verify responses
+- CLI project: run the actual CLI binary with real arguments, verify output
+- Web app: start the app, interact via browser/playwright, verify behavior
+- Library: import it in a standalone script (not a test file), call functions, verify results
+
+**What does NOT qualify:**
+- Writing another pytest/cargo test (that's Mock or Integration tested)
+- Running `pytest` / `cargo test` and seeing green (that's Mock or Integration tested)
+- "The code compiles without errors" (that's part of Implemented)
+- "I verified the logic looks correct" (that's Spec Compliant)
+- An agent saying "I tested it" without showing actual execution output
+- The same agent that wrote the code "verifying" its own work
+
+**Evidence required:** The agent must show the actual command run + its output proving the built artifact works correctly. This evidence must be recorded in the task notes.
 
 **Note**: The Audit Verified checkbox is verified by a two-pronged Implementation Audit (Phase 9):
 1. **Static analysis** scans for NotImplementedError, TODO, FIXME, empty function bodies, placeholder strings

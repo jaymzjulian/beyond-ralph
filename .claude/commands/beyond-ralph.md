@@ -92,23 +92,52 @@ Update records/[module]/tasks.md checkboxes when done."
 - **After ALL tasks implemented, proceed to Phase 8**
 
 ### Phase 8: TESTING
-Spawn SEPARATE testing agents per task (NOT per module):
+Three DISTINCT stages. Do NOT conflate them. Each uses DIFFERENT agents.
+
+**8a: Mock + Integration Testing** (run existing tests)
+Spawn testing agents to execute the test suite:
 ```
-Task(
-    subagent_type="general-purpose",
-    max_turns=20,
-    prompt="Test [specific task] - run relevant unit and integration tests.
+Task(max_turns=20, prompt="Run unit and integration tests for [task].
+Execute: cargo test / pytest tests/ (as appropriate for this project)
+Report pass/fail results.
+Mark [x] Mock Tested and [x] Integration Tested when relevant tests pass.
 
 CONTEXT BUDGET RULES:
-- Use Grep/Glob to find test files - do NOT read entire source files
+- Use Grep/Glob to find test files
 - Run only the tests relevant to this specific task
-- Report results concisely
-
-Update records/[module]/tasks.md checkboxes when done."
-)
+- Report results concisely")
 ```
-- If tests fail, loop back to Phase 7 for fixes (targeted fix agent)
-- **When ALL tests pass, proceed to Phase 9**
+
+**8c: Live Testing (ACTUALLY BUILD AND RUN THE ARTIFACT - MANDATORY)**
+This is NOT more unit tests. A SEPARATE agent (not the one that wrote the code) must:
+1. **BUILD** the actual project (cargo build / python -m build / npm run build)
+2. **RUN** the built artifact with real inputs
+3. **VERIFY** the output is correct
+4. **RECORD** the command + output as evidence
+
+```
+Task(max_turns=25, prompt="LIVE TEST: You must ACTUALLY BUILD AND RUN the artifact.
+
+DO NOT write or run pytest/cargo test. That was phase 8a.
+You are a SEPARATE verification agent - you did not write this code.
+
+Steps:
+1. Build the project (cargo build / python -m build / etc.)
+2. Run the ACTUAL BUILT ARTIFACT with real inputs
+3. Verify the output is correct
+4. Record the exact command and output in records/[module]/tasks.md
+
+Examples:
+- Compiler: compile a test .qc program, run the binary, verify output
+- API: start the server, curl an endpoint, verify the response body
+- CLI: run the binary with real args, verify stdout
+
+Mark [x] Live Tested ONLY after you have executed the actual artifact
+and recorded evidence of correct output.
+DO NOT mark it just because tests pass - that is Mock/Integration tested.")
+```
+- If any stage fails, loop back to Phase 7 for fixes (targeted fix agent)
+- **When ALL stages pass (including live testing), proceed to Phase 9**
 
 ### Phase 9: IMPLEMENTATION_AUDIT
 Two-pronged audit to catch stubs, fakes, and TODOs:
@@ -186,13 +215,13 @@ Task(max_turns=15, prompt="Write tests for 6502 register allocator. Test file: t
 ## Task Checkboxes (7 per task)
 
 Every task in `records/[module]/tasks.md` needs:
-- [ ] Planned
-- [ ] Implemented
-- [ ] Mock Tested
-- [ ] Integration Tested
-- [ ] Live Tested
-- [ ] Spec Compliant
-- [ ] Audit Verified
+- [ ] Planned - design documented
+- [ ] Implemented - code written
+- [ ] Mock Tested - unit tests with mocks/stubs pass (no external deps)
+- [ ] Integration Tested - tests verifying module interactions pass
+- [ ] Live Tested - ACTUAL ARTIFACT EXECUTED with correct results (NOT more tests - build it, run it, verify it). Must be done by a SEPARATE agent from the implementer.
+- [ ] Spec Compliant - verified by SEPARATE agent reading spec vs implementation
+- [ ] Audit Verified - verified by static analysis + LLM interrogation (no stubs/fakes)
 
 ## Completion Check
 
