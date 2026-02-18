@@ -59,30 +59,132 @@ Read `SPEC.md` (or configured spec path) and:
    - Identify REMOVED requirements that were implemented
    - Identify MODIFIED requirements that need re-validation
 
-## STEP 5: Validate Project Plan
-Read `PROJECT_PLAN.md` and cross-reference:
-1. **All spec requirements covered?** - Every MUST/REQUIRED in spec has a task
-2. **All modules accounted for?** - Check `records/*/tasks.md` exist
-3. **Checkboxes accurate?** - Verify claimed completions:
-   - "Implemented" → code actually exists (FULLY - no stubs, no partial)
-   - "Tested" → tests actually pass (mock, integration, AND live)
-   - "Spec Compliant" → adversarial per-requirement check passed
+## STEP 5: SPAWN ADVERSARIAL SPEC COMPLIANCE AGENT (MANDATORY)
 
-**ZERO DEFERRAL POLICY**: If ANY requirement in the spec is marked "deferred to v2", "future work", "simplified version", or similar, that is a FAILURE. There is no v2. There are no time constraints. Everything in the spec MUST be fully implemented.
+**DO NOT TRUST CHECKBOXES. DO NOT TRUST THE STATE FILE. DO NOT TRUST YOUR OWN MEMORY.**
 
-## STEP 6: Identify Gaps
-Compare spec requirements vs actual state:
+Checkboxes are self-reported by the agents that did the work. They grade their own exams.
+The state file reflects what agents CLAIMED to do, not what they ACTUALLY did.
+You are the orchestrator - you have a bias toward believing your own agents succeeded.
+
+**You MUST use the Task tool to spawn a SEPARATE agent** for this step. Do NOT do it yourself.
+You are biased. A fresh agent with no prior context will be more honest.
+
+### Pass 1: Requirement Extraction (SEPARATE AGENT)
 ```
-For each requirement in SPEC.md:
-  - Is it in PROJECT_PLAN.md?
-  - Is there a module for it?
-  - Are all 7 checkboxes checked?
-  - Does the implementation ACTUALLY match the requirement?
+Task(
+    subagent_type="general-purpose",
+    max_turns=15,
+    description="Extract requirements from spec",
+    prompt="REQUIREMENT EXTRACTOR: You are extracting requirements from a specification.
 
-If ANY gaps found:
-  - State is NOT "complete" regardless of what state file says
-  - Report gaps and schedule work
+Read the specification at: [SPEC_PATH]
+Also read ALL module specs: records/*/spec.md
+
+Extract EVERY requirement, feature, behavior, constraint, and interface.
+Number them sequentially: REQ-001, REQ-002, etc.
+
+Include ALL of these:
+- Explicit requirements (MUST, SHALL, SHOULD, REQUIRED)
+- Implicit requirements (described behaviors, documented interfaces)
+- Feature descriptions (anything the system should DO)
+- Edge cases mentioned
+- Error handling requirements
+- Performance/quality constraints
+- Integration points
+
+Do NOT skip anything. Do NOT summarize or combine.
+If in doubt whether something is a requirement, INCLUDE IT.
+Be EXHAUSTIVE - missing a requirement here means it never gets checked.
+
+CONTEXT BUDGET RULES: [standard rules]"
+)
 ```
+
+### Pass 2: Adversarial Code Audit (SEPARATE AGENT - DIFFERENT FROM PASS 1)
+```
+Task(
+    subagent_type="general-purpose",
+    max_turns=30,
+    description="Adversarial spec compliance audit",
+    prompt="ADVERSARIAL SPEC COMPLIANCE AUDITOR
+
+You are an INDEPENDENT AUDITOR. Your job is to FIND FAILURES and LIES.
+
+CRITICAL RULES:
+1. DO NOT TRUST CHECKBOXES - they are self-reported and often wrong
+2. DO NOT TRUST comments saying 'implemented' or 'complete'
+3. DO NOT TRUST the state file or PROJECT_PLAN.md claims
+4. ONLY trust what you can SEE in the actual source code
+5. If you cannot find the implementing code, it is NOT implemented
+
+ZERO DEFERRAL POLICY:
+- 'Deferred to v2' = FAIL (there is no v2)
+- 'Partial implementation' = FAIL
+- 'Simplified version' = FAIL
+- 'Placeholder' / 'stub' / 'mock' in production code = FAIL
+- 'TODO' / 'FIXME' / 'HACK' = FAIL
+- Empty function bodies = FAIL
+- Functions that just return hardcoded values = FAIL
+- There are NO time constraints. Everything MUST be implemented.
+
+Here are the extracted requirements:
+[PASTE REQUIREMENTS FROM PASS 1]
+
+For EACH requirement:
+1. Use Grep/Glob to search the ACTUAL SOURCE CODE (not test files, not docs)
+2. Find the EXACT function/method/code that implements it
+3. READ the implementation - does it ACTUALLY do what the spec says?
+4. Is it a REAL implementation or a stub/fake/placeholder?
+5. Mark PASS only if you find complete, working, non-stub code
+
+OUTPUT FORMAT (MANDATORY):
+```
+SPEC_COMPLIANCE_RESULT: PASS/FAIL
+TOTAL_REQUIREMENTS: N
+PASSED: N
+FAILED: N
+
+CHECKLIST:
+REQ-001: [requirement text] -> PASS | src/module/file.rs:45-120 (implements X by doing Y)
+REQ-002: [requirement text] -> FAIL | Function exists but body is TODO
+REQ-003: [requirement text] -> FAIL | Not found anywhere in source code
+REQ-004: [requirement text] -> FAIL | Only partially implemented - handles A but not B or C
+...
+
+CRITICAL FAILURES (if any):
+- [List the most severe gaps that need immediate attention]
+```
+
+ANY single FAIL = SPEC_COMPLIANCE_RESULT: FAIL
+
+CONTEXT BUDGET RULES: [standard rules]"
+)
+```
+
+### After the adversarial audit:
+- If SPEC_COMPLIANCE_RESULT: FAIL → **Uncheck [x] Spec Compliant** on ALL tasks with failures
+- Report the exact FAILED requirements to the user
+- Schedule implementation work for each FAILED requirement
+- Do NOT accept excuses from previous agents about why things were deferred
+
+## STEP 6: Cross-Reference Checklist Against Checkboxes
+
+After the adversarial agent reports back:
+```
+For each FAILED requirement:
+  1. Find which task/module it belongs to
+  2. UNCHECK [x] Spec Compliant (it was checked incorrectly)
+  3. If the code is missing entirely, also UNCHECK [x] Implemented
+  4. Add the requirement to the implementation queue
+
+For each PASSED requirement:
+  1. Verify the corresponding task has [x] Spec Compliant
+  2. If not, check it now (the adversarial agent confirmed it)
+```
+
+**The adversarial agent's assessment OVERRIDES all previous checkbox states.**
+If it says FAIL, the checkbox gets unchecked regardless of what any previous agent claimed.
 
 ## STEP 7: Update Prompt in State File
 **Update `.beyond_ralph_state` with a continuation prompt describing the work to do:**

@@ -147,11 +147,13 @@ DO NOT mark it just because tests pass - that is Mock/Integration tested.")
 - If any stage fails, loop back to Phase 7 for fixes (targeted fix agent)
 - **When ALL stages pass (including live testing), proceed to Phase 8.5**
 
-### Phase 8.5: SPEC_COMPLIANCE (Adversarial Verification - MANDATORY)
+### Phase 8.5: SPEC_COMPLIANCE (Adversarial Verification - MANDATORY - ALWAYS RUNS)
 
-A SEPARATE agent (NOT the implementer, NOT the tester) performs an **adversarial** review of the implementation against the specification. This agent's job is to FIND GAPS, not confirm success.
+**DO NOT TRUST CHECKBOXES.** Checkboxes are self-reported by implementing agents. They grade their own exams. Even if all tasks show [x] Spec Compliant, this phase MUST still run. The adversarial agent's assessment OVERRIDES all previous checkbox states.
 
-**Two-pass verification:**
+A SEPARATE agent (NOT the implementer, NOT the tester, NOT the orchestrator) performs an **adversarial** review. This agent's job is to FIND FAILURES and LIES, not confirm success.
+
+**Two-pass verification (MUST use Task tool to spawn SEPARATE agents):**
 
 **Pass 1: Requirement Extraction** (max_turns=15)
 ```
@@ -174,43 +176,55 @@ If in doubt whether something is a requirement, INCLUDE IT.
 CONTEXT BUDGET RULES: [...]")
 ```
 
-**Pass 2: Adversarial Compliance Check** (max_turns=25)
+**Pass 2: Adversarial Compliance Check** (max_turns=30)
 ```
-Task(max_turns=25, prompt="ADVERSARIAL SPEC COMPLIANCE AGENT: Your job is to FIND FAILURES.
+Task(max_turns=30, prompt="ADVERSARIAL SPEC COMPLIANCE AUDITOR: Your job is to FIND FAILURES and LIES.
 
-You are an ADVERSARIAL reviewer. You are NOT here to confirm the code works.
-You are here to find every way it FAILS to meet the specification.
+You are an INDEPENDENT AUDITOR. You have NO prior context about this project.
+Previous agents may have LIED about what they implemented. Checkboxes may be WRONG.
+
+TRUST NOTHING EXCEPT ACTUAL SOURCE CODE:
+- DO NOT trust checkboxes in records/*/tasks.md (self-reported, often wrong)
+- DO NOT trust comments saying 'implemented' or 'complete'
+- DO NOT trust PROJECT_PLAN.md claims
+- DO NOT trust the state file
+- ONLY trust what you can SEE in actual source code files
+- If you cannot FIND the implementing code with Grep, it does NOT exist
 
 ZERO DEFERRAL POLICY:
 - 'Deferred to v2' = FAIL (there is no v2)
 - 'Partial implementation' = FAIL
 - 'Simplified version' = FAIL (implement the SPECIFIED version)
-- 'Good enough' = FAIL
-- 'Placeholder' = FAIL
-- There are NO time constraints. Everything in the spec MUST be implemented.
+- 'Placeholder' / 'stub' / 'mock' in production code = FAIL
+- 'TODO' / 'FIXME' / 'HACK' = FAIL
+- Empty function bodies / just 'pass' = FAIL
+- Functions returning hardcoded values instead of real logic = FAIL
+- There are NO time constraints. Everything MUST be implemented.
 
 For EACH requirement in the extracted list:
-1. Find the EXACT code that implements it (file:line)
-2. Verify the code ACTUALLY implements what the spec says (not just something similar)
-3. Check edge cases mentioned in the spec are handled
-4. Mark PASS only if you can point to complete, working code
+1. Use Grep/Glob to search ACTUAL SOURCE CODE (not tests, not docs, not comments)
+2. Find the EXACT function/method/code that implements it (file:line)
+3. READ the code - does it ACTUALLY do what the spec says? Is it real logic?
+4. Mark PASS only if you find complete, working, non-stub code
 
 Output format (MANDATORY - use this EXACT format):
-```
 SPEC_COMPLIANCE_RESULT: PASS/FAIL
 TOTAL_REQUIREMENTS: N
 PASSED: N
 FAILED: N
 
 CHECKLIST:
-REQ-001: [spec text] -> PASS | src/foo.py:45-120
+REQ-001: [spec text] -> PASS | src/foo.rs:45-120 (implements X via Y)
 REQ-002: [spec text] -> FAIL | Not found in codebase
-REQ-003: [spec text] -> FAIL | Only partial - missing X and Y
-...
-```
+REQ-003: [spec text] -> FAIL | Only partial - handles A but not B or C
+REQ-004: [spec text] -> FAIL | Function exists but body is TODO/stub
+
+CRITICAL FAILURES:
+- [List the most severe gaps]
 
 ANY single FAIL = SPEC_COMPLIANCE_RESULT: FAIL
 Do NOT mark Spec Compliant on any tasks if there are failures.
+UNCHECK [x] Spec Compliant on tasks where the adversarial check found failures.
 
 CONTEXT BUDGET RULES: [...]")
 ```

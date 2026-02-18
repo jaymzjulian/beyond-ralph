@@ -440,6 +440,17 @@ Every feature MUST have all seven checkboxes checked:
 
 **Note**: The Spec Compliant checkbox is verified by a SpecComplianceAgent that is DIFFERENT from both the implementation agent and the testing agent. This catches cases where tests pass but the implementation doesn't match requirements.
 
+### Do Not Trust Checkboxes (CRITICAL)
+
+**Checkboxes are self-reported by the agents that did the work. They are grading their own exams.**
+
+- Agents will check `[x] Implemented` when they wrote code, even if it's a stub
+- Agents will check `[x] Spec Compliant` based on their own belief, not independent verification
+- The PROJECT_PLAN.md may show `[x]` for items that don't actually exist in code
+- The state file may claim "100% complete" while critical features are missing
+
+**The ONLY source of truth is the actual source code.** The adversarial spec compliance agent (Phase 8.5) must verify by searching actual code, not by reading checkboxes. Its assessment OVERRIDES all previous checkbox states.
+
 ### Zero Deferral Principle (CRITICAL - ALL AGENTS MUST FOLLOW)
 
 **There is NO concept of "defer to v2", "future version", "next release", or "out of scope".**

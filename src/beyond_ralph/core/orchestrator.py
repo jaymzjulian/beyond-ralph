@@ -1029,17 +1029,7 @@ INCOMPLETE_TASKS: (list of tasks missing checkboxes)
         result_text = session.result or ""
         all_passed = "ALL_TESTS_PASSED: true" in result_text.lower()
 
-        # Check if all tasks are complete (7/7 checkboxes)
-        if self.records_manager.is_complete():
-            return PhaseResult(
-                success=True,
-                phase=Phase.TESTING,
-                message="All tests passed - project complete",
-                next_phase=Phase.COMPLETE,
-                data={"testing_result": session.result},
-            )
-
-        # If not complete, check if tests failed or just missing checkboxes
+        # If tests failed, loop back to implementation
         if not all_passed:
             return PhaseResult(
                 success=True,
@@ -1050,7 +1040,9 @@ INCOMPLETE_TASKS: (list of tasks missing checkboxes)
                 data={"testing_result": session.result},
             )
 
-        # Tests passed but checkboxes incomplete - run adversarial spec compliance
+        # ALWAYS run adversarial spec compliance - DO NOT trust checkboxes.
+        # Checkboxes are self-reported by agents and CANNOT be trusted.
+        # Even if all 7/7 are checked, we must independently verify.
 
         # PASS 1: Extract requirements from spec
         if self._enable_streaming:
@@ -1088,28 +1080,37 @@ If in doubt whether something is a requirement, INCLUDE IT.
 
         compliance_session = await self.session_manager.spawn(
             use_cli=self.use_cli,
-            max_turns=25,
-            prompt=f"""ADVERSARIAL SPEC COMPLIANCE AGENT: Your job is to FIND FAILURES.
+            max_turns=30,
+            prompt=f"""ADVERSARIAL SPEC COMPLIANCE AUDITOR: Your job is to FIND FAILURES and LIES.
 
-You are an ADVERSARIAL reviewer. You are NOT here to confirm the code works.
-You are here to find every way it FAILS to meet the specification.
+You are an INDEPENDENT AUDITOR with NO prior context about this project.
+Previous agents may have LIED about what they implemented.
+
+TRUST NOTHING EXCEPT ACTUAL SOURCE CODE:
+- DO NOT trust checkboxes in records/*/tasks.md (self-reported, often wrong)
+- DO NOT trust comments saying 'implemented' or 'complete'
+- DO NOT trust PROJECT_PLAN.md claims
+- ONLY trust what you can SEE in actual source code files
+- If you cannot FIND the code with Grep, it does NOT exist
 
 ZERO DEFERRAL POLICY:
 - 'Deferred to v2' = FAIL (there is no v2)
 - 'Partial implementation' = FAIL
-- 'Simplified version' = FAIL (implement the SPECIFIED version)
-- 'Good enough' = FAIL
-- 'Placeholder' = FAIL
-- There are NO time constraints. Everything in the spec MUST be implemented.
+- 'Simplified version' = FAIL
+- 'Placeholder' / 'stub' / 'mock' in production code = FAIL
+- 'TODO' / 'FIXME' / 'HACK' = FAIL
+- Empty function bodies = FAIL
+- Functions returning hardcoded values instead of real logic = FAIL
+- There are NO time constraints. Everything MUST be implemented.
 
 Here are the extracted requirements:
 {requirements_list}
 
 For EACH requirement:
-1. Find the EXACT code that implements it (file:line)
-2. Verify the code ACTUALLY does what the spec says (not just something similar)
-3. Check edge cases mentioned in the spec are handled
-4. Mark PASS only if you can point to complete, working code
+1. Use Grep/Glob to search ACTUAL SOURCE CODE (not tests, not docs)
+2. Find the EXACT function/method that implements it (file:line)
+3. READ the code - is it real logic or a stub/fake?
+4. Mark PASS only if you find complete, working, non-stub code
 
 Output format (MANDATORY):
 SPEC_COMPLIANCE_RESULT: PASS/FAIL
@@ -1118,12 +1119,15 @@ PASSED: N
 FAILED: N
 
 CHECKLIST:
-REQ-001: [spec text] -> PASS/FAIL | [evidence: file:line or reason for failure]
+REQ-001: [spec text] -> PASS/FAIL | [file:line or reason for failure]
 REQ-002: ...
+
+CRITICAL FAILURES:
+- [List the most severe gaps]
 
 ANY single FAIL = SPEC_COMPLIANCE_RESULT: FAIL
 Do NOT mark [x] Spec compliant on ANY tasks if there are failures.
-Only mark [x] Spec compliant on ALL tasks if SPEC_COMPLIANCE_RESULT: PASS.
+UNCHECK [x] Spec compliant on tasks where this audit found failures.
 {CONTEXT_BUDGET_RULES}""",
             agent_type="validation",
             output_callback=self._stream_output,
