@@ -147,11 +147,19 @@ DO NOT mark it just because tests pass - that is Mock/Integration tested.")
 - If any stage fails, loop back to Phase 7 for fixes (targeted fix agent)
 - **When ALL stages pass (including live testing), proceed to Phase 8.5**
 
-### Phase 8.5: SPEC_COMPLIANCE (Adversarial Verification - MANDATORY - ALWAYS RUNS)
+### Phase 8.5: SPEC_COMPLIANCE (Adversarial Verification - NON-NEGOTIABLE - ALWAYS RUNS)
 
-**DO NOT TRUST CHECKBOXES.** Checkboxes are self-reported by implementing agents. They grade their own exams. Even if all tasks show [x] Spec Compliant, this phase MUST still run. The adversarial agent's assessment OVERRIDES all previous checkbox states.
+**YOU CANNOT SKIP THIS PHASE. YOU CANNOT ABBREVIATE IT. YOU CANNOT REPLACE IT WITH YOUR OWN JUDGMENT.**
 
-A SEPARATE agent (NOT the implementer, NOT the tester, NOT the orchestrator) performs an **adversarial** review. This agent's job is to FIND FAILURES and LIES, not confirm success.
+Common excuses that are NOT acceptable:
+- "Let me focus on what matters most instead" - NO. Run the full audit.
+- "A full audit would consume too much context" - NO. It runs in a SEPARATE agent with ITS OWN context.
+- "I already know the gaps" - NO. You are BIASED. Spawn the agent.
+- "Given time/context constraints" - NO. There are no constraints. Run the audit.
+
+**DO NOT TRUST CHECKBOXES.** They are self-reported by implementing agents who grade their own exams. Even if all tasks show [x] Spec Compliant, this phase MUST still run. The adversarial agent's assessment OVERRIDES all previous checkbox states.
+
+A SEPARATE agent (NOT the implementer, NOT the tester, NOT the orchestrator) performs an **adversarial** review. This agent's job is to FIND FAILURES and LIES, not confirm success. It runs in its own context window - it does NOT consume yours.
 
 **Two-pass verification (MUST use Task tool to spawn SEPARATE agents):**
 

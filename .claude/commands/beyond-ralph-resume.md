@@ -59,7 +59,21 @@ Read `SPEC.md` (or configured spec path) and:
    - Identify REMOVED requirements that were implemented
    - Identify MODIFIED requirements that need re-validation
 
-## STEP 5: SPAWN ADVERSARIAL SPEC COMPLIANCE AGENT (MANDATORY)
+## STEP 5: SPAWN ADVERSARIAL SPEC COMPLIANCE AGENT (NON-NEGOTIABLE)
+
+**YOU CANNOT SKIP THIS STEP. YOU CANNOT ABBREVIATE IT. YOU CANNOT "FOCUS ON WHAT MATTERS MOST" INSTEAD.**
+
+This step is not optional. You do not have discretion to replace it with your own judgment.
+You do not get to decide "a full audit would consume too much context" - the audit runs
+in a SEPARATE AGENT with its OWN context window, not yours. Context is not your concern.
+
+**COMMON EXCUSES THAT ARE NOT ACCEPTABLE:**
+- "Let me focus on what matters most" - NO. Run the full audit.
+- "Rather than a full adversarial audit..." - NO. Run the FULL audit.
+- "Given the user's directive, I'll prioritize..." - NO. The user's directive includes THIS AUDIT.
+- "To save context, I'll do a targeted check" - NO. The audit runs in a SEPARATE agent. Your context is fine.
+- "I already know what the gaps are" - NO. You are BIASED. Spawn the agent.
+- "The previous audit found..." - NO. Run a NEW audit. Previous results are stale.
 
 **DO NOT TRUST CHECKBOXES. DO NOT TRUST THE STATE FILE. DO NOT TRUST YOUR OWN MEMORY.**
 
@@ -69,6 +83,7 @@ You are the orchestrator - you have a bias toward believing your own agents succ
 
 **You MUST use the Task tool to spawn a SEPARATE agent** for this step. Do NOT do it yourself.
 You are biased. A fresh agent with no prior context will be more honest.
+The separate agent uses ITS OWN context window - it does NOT consume yours.
 
 ### Pass 1: Requirement Extraction (SEPARATE AGENT)
 ```
