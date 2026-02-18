@@ -118,7 +118,7 @@ CONTEXT BUDGET RULES:
 
 **8c: Live Testing (ACTUALLY BUILD AND RUN THE ARTIFACT - MANDATORY)**
 This is NOT more unit tests. A SEPARATE agent (not the one that wrote the code) must:
-1. **BUILD** the actual project (cargo build / python -m build / npm run build)
+1. **BUILD** the actual project (cargo build / python -m build / npm run build / ./gradlew assembleDebug)
 2. **RUN** the built artifact with real inputs
 3. **VERIFY** the output is correct
 4. **RECORD** the command + output as evidence
@@ -126,19 +126,47 @@ This is NOT more unit tests. A SEPARATE agent (not the one that wrote the code) 
 ```
 Task(max_turns=25, prompt="LIVE TEST: You must ACTUALLY BUILD AND RUN the artifact.
 
-DO NOT write or run pytest/cargo test. That was phase 8a.
+DO NOT write or run pytest/cargo test/gradle test. That was phase 8a.
 You are a SEPARATE verification agent - you did not write this code.
 
 Steps:
-1. Build the project (cargo build / python -m build / etc.)
+1. Build the project (see platform-specific instructions below)
 2. Run the ACTUAL BUILT ARTIFACT with real inputs
 3. Verify the output is correct
 4. Record the exact command and output in records/[module]/tasks.md
 
-Examples:
-- Compiler: compile a test .qc program, run the binary, verify output
-- API: start the server, curl an endpoint, verify the response body
-- CLI: run the binary with real args, verify stdout
+Platform-specific live testing:
+
+COMPILER: compile a test source file, run the output binary, verify output
+API/SERVER: start the server, curl an endpoint, verify the response body
+CLI: run the binary with real args, verify stdout
+WEB APP: start the app, use playwright/curl to interact, verify behavior
+
+ANDROID APP:
+1. Build: ./gradlew assembleDebug (produces APK in app/build/outputs/apk/debug/)
+2. Check for emulator: adb devices (or start one: emulator -avd <name> -no-window &)
+3. If no emulator/device: use avdmanager to create one, then launch it
+   - sdkmanager 'system-images;android-34;google_apis;x86_64'
+   - avdmanager create avd -n test_device -k 'system-images;android-34;google_apis;x86_64'
+   - emulator -avd test_device -no-window -no-audio &
+   - adb wait-for-device
+4. Install: adb install -r app/build/outputs/apk/debug/app-debug.apk
+5. Launch: adb shell am start -n <package>/<activity>
+6. Verify: adb shell dumpsys activity activities | grep mResumed (app is running)
+7. Interact: adb shell input tap X Y / adb shell input text 'hello'
+8. Screenshot: adb shell screencap -p /sdcard/screen.png && adb pull /sdcard/screen.png
+9. Logs: adb logcat -d -s <tag> (check for crashes/errors)
+
+iOS APP:
+1. Build: xcodebuild -scheme <scheme> -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 15'
+2. Install: xcrun simctl install booted <app-path>
+3. Launch: xcrun simctl launch booted <bundle-id>
+4. Screenshot: xcrun simctl io booted screenshot screen.png
+
+DESKTOP GUI:
+1. Build and launch the application
+2. Use xdotool/pyautogui for interaction
+3. Take screenshots with scrot/import for verification
 
 Mark [x] Live Tested ONLY after you have executed the actual artifact
 and recorded evidence of correct output.

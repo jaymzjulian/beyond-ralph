@@ -503,6 +503,9 @@ A single FAIL = Spec Compliant checkbox stays unchecked.
 - CLI project: run the actual CLI binary with real arguments, verify output
 - Web app: start the app, interact via browser/playwright, verify behavior
 - Library: import it in a standalone script (not a test file), call functions, verify results
+- Android app: `./gradlew assembleDebug`, install APK on emulator via `adb install`, launch the activity, verify with `adb shell dumpsys` and screenshots via `adb shell screencap`
+- iOS app: `xcodebuild` for simulator, `xcrun simctl install/launch`, verify with screenshots
+- Desktop GUI: build and launch, interact with xdotool/pyautogui, verify with screenshots
 
 **What does NOT qualify:**
 - Writing another pytest/cargo test (that's Mock or Integration tested)
