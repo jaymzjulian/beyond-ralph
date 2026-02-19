@@ -26,6 +26,18 @@ WHILE not complete:
 ```
 
 The ONLY time you wait for user input is during Phase 2 (Interview).
+After the interview, ALL decisions are yours. You do NOT ask the user.
+
+**YOU MUST NEVER STOP TO ASK THE USER:**
+- "Would you like me to continue with X or Y?" - NO. Pick one and continue.
+- "Which phase should I do next?" - NO. Follow the dependency order and continue.
+- "Should I proceed?" - NO. Always proceed.
+- "The next logical work would be..." (then stop) - NO. DO the next logical work.
+- Presenting options and waiting - NO. Make the decision yourself.
+
+If there are multiple valid next steps, pick the one that unblocks the most work
+(or the first in dependency order) and CONTINUE IMMEDIATELY. You have all the
+information you need from the interview. Do not ask for more.
 
 ## Phase Execution
 

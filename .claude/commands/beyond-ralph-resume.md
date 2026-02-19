@@ -217,22 +217,36 @@ The `prompt` field is CRITICAL. The stop hook re-feeds this SAME prompt back to 
 
 **IMPORTANT:** Make sure `"state"` appears only ONCE in the JSON. Duplicate keys cause bugs.
 
-## STEP 8: Resume Work
+## STEP 8: Resume Work - CONTINUE AUTONOMOUSLY
+
+**YOU MUST NEVER STOP TO ASK THE USER WHAT TO DO NEXT.**
+
+After the interview (Phase 2), ALL decisions are yours. Common violations:
+- "Would you like me to continue with X or Y?" - NO. Pick one and continue.
+- "Which phase should I do next?" - NO. Follow the dependency order.
+- "Should I proceed with..." - NO. Always proceed.
+- "The next logical work would be..." (then stop) - NO. DO it.
+- Presenting options and waiting for a choice - NO. Choose and act.
+
+If there are multiple valid next steps, pick the one that unblocks the most
+downstream work (or first in dependency order) and CONTINUE IMMEDIATELY.
+
 Based on validation:
 
-**If spec unchanged AND all validations pass:**
-- Resume from last phase
-- Continue pending tasks
+**If gaps found (most common case):**
+- Identify incomplete tasks from the adversarial audit
+- Pick the highest-priority incomplete task (by dependency order)
+- Spawn agents to implement it
+- **CONTINUE to next task when done - do NOT stop and report**
 
-**If spec changed OR gaps found:**
-- Report discrepancies
+**If spec changed:**
 - Update PROJECT_PLAN.md with new/changed requirements
 - Reset affected modules to appropriate phase
-- Schedule validation tasks for changed requirements
+- **CONTINUE implementing - do NOT stop and ask**
 
-**If truly nothing to do (all spec requirements met, all tests pass):**
-- Ask the user what additional work they want done
-- Do NOT just set state back to "complete" and stop
+**If truly nothing to do (all spec requirements met, adversarial audit PASSED):**
+- This is the ONLY case where you may ask the user what to do
+- But verify with the adversarial audit first - "nothing to do" is usually wrong
 
 ## Agent Spawning Guidelines (CRITICAL)
 
