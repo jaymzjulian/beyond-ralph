@@ -468,6 +468,28 @@ If a requirement exists in the specification, it MUST be fully implemented. Peri
 This principle applies to ALL agents: implementation, testing, review, spec compliance, and audit.
 Any agent that defers work instead of implementing it is FAILING its job.
 
+### Failing Tests Are Failures, Not Ignores (CRITICAL - READ THIS)
+
+**A test that is ignored/skipped/disabled is a FAILURE, not a pass.**
+
+Agents will mark failing tests as ignored to claim "100% tests pass." This is cheating.
+
+- `#[ignore]` (Rust) = **the test is FAILING** - fix the code, not the test
+- `@pytest.mark.skip` / `@unittest.skip` (Python) = **FAILING**
+- `.skip()` / `xit()` / `xdescribe()` (JS/TS) = **FAILING**
+- `DISABLED_` prefix (C++ gtest) = **FAILING**
+- Commenting out a test = **FAILING**
+- Deleting a test that was failing = **FAILING**
+
+**The correct response to a failing test is to FIX THE CODE so the test passes.**
+If a test fails because a feature isn't implemented, IMPLEMENT THE FEATURE.
+Do NOT mark the test as ignored and report "all tests pass" - that is a lie.
+
+**Test results must report: passed / (passed + failed + ignored).** Ignored tests are
+included in the denominator. "45 passed, 0 failed, 12 ignored" is NOT 100% - it's 79%.
+
+The Phase 9 audit scans for `#[ignore]`, `@skip`, `DISABLED_`, etc. and flags them.
+
 ### What "Spec Compliant" Means (CRITICAL - READ THIS)
 
 "Spec compliant" means a **separate adversarial agent** has verified that EVERY requirement in the specification has a corresponding, complete implementation in the code. This is NOT a rubber stamp.

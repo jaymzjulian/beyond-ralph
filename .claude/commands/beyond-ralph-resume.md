@@ -261,13 +261,19 @@ When spawning agents via the Task tool, ALWAYS:
 
 2. **One agent per TASK, not per MODULE** - large modules MUST be broken into individual tasks
 
-3. **Include CONTEXT BUDGET RULES and ZERO DEFERRAL POLICY in every prompt**:
+3. **Include these MANDATORY rules in every agent prompt**:
 ```
 ZERO DEFERRAL POLICY (MANDATORY):
 - You MUST fully implement everything described in the spec for this task
 - Do NOT defer anything to 'v2', 'future work', or 'next version'
 - Do NOT implement a 'simplified version' - implement the SPECIFIED version
 - There are NO time constraints - take as long as needed to implement fully
+
+FAILING TESTS ARE FAILURES, NOT IGNORES (MANDATORY):
+- Do NOT mark failing tests as #[ignore], @pytest.mark.skip, .skip(), DISABLED_, or equivalent
+- Do NOT comment out or delete failing tests
+- A failing test means THE CODE IS WRONG - fix the code, not the test
+- Reporting '100% pass' with ignored tests is a LIE and will be caught by the audit
 
 CONTEXT BUDGET RULES:
 - Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)

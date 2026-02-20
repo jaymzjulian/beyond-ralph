@@ -94,6 +94,14 @@ ZERO DEFERRAL POLICY (MANDATORY):
 - There are NO time constraints - take as long as needed to implement fully
 - If the spec says it, you MUST implement it. No exceptions.
 
+FAILING TESTS ARE FAILURES, NOT IGNORES (MANDATORY):
+- Do NOT mark failing tests as #[ignore], @pytest.mark.skip, .skip(), DISABLED_, or any equivalent
+- Do NOT comment out failing tests
+- Do NOT delete failing tests to make the suite pass
+- A failing test means THE CODE IS WRONG - fix the code, not the test
+- If a test fails because the feature isn't implemented, IMPLEMENT THE FEATURE
+- '100% tests pass' with ignored tests is a LIE and will be caught by the audit
+
 CONTEXT BUDGET RULES:
 - Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)
 - Read only the functions/sections you need to modify
@@ -121,6 +129,13 @@ Task(max_turns=20, prompt="Run unit and integration tests for [task].
 Execute: cargo test / pytest tests/ (as appropriate for this project)
 Report pass/fail results.
 Mark [x] Mock Tested and [x] Integration Tested when relevant tests pass.
+
+CRITICAL - FAILING TESTS ARE FAILURES:
+- Report the ACTUAL number of passed, failed, AND ignored/skipped tests
+- Ignored/skipped tests count as FAILURES, not passes
+- If you find tests marked #[ignore]/@pytest.mark.skip/DISABLED_: report them as failures
+- Do NOT report '100% pass' if there are ignored tests - that is a lie
+- The correct metric is: passed / (passed + failed + ignored) - ignored tests are NOT excluded
 
 CONTEXT BUDGET RULES:
 - Use Grep/Glob to find test files
@@ -281,20 +296,32 @@ CONTEXT BUDGET RULES: [...]")
 - **When ALL requirements pass, proceed to Phase 9**
 
 ### Phase 9: IMPLEMENTATION_AUDIT
-Two-pronged audit to catch stubs, fakes, and TODOs:
+Three-pronged audit to catch stubs, fakes, TODOs, and cheating:
 
 **Prong 1: Static Analysis** (fast, deterministic)
 - Scan source files for NotImplementedError, TODO, FIXME, HACK, empty function bodies
 - If CRITICAL or HIGH findings exist, loop back to Phase 7
 
-**Prong 2: LLM Interrogation** (thorough, semantic)
+**Prong 2: Ignored Test Detection** (fast, deterministic)
+- Scan ALL test files for ignored/skipped/disabled tests:
+  - Rust: `#[ignore]`
+  - Python: `@pytest.mark.skip`, `@unittest.skip`, `pytest.skip()`
+  - JavaScript/TypeScript: `.skip(`, `xit(`, `xdescribe(`, `xtest(`
+  - C++: `DISABLED_` prefix in test names
+  - Any language: commented-out test functions
+- Each ignored test = a FAILURE that was hidden. Report them all.
+- If ANY ignored tests found: loop back to Phase 7 to implement the missing functionality
+- Do NOT accept "this test is flaky" or "platform-specific" as excuses without evidence
+
+**Prong 3: LLM Interrogation** (thorough, semantic)
 - For EACH module, spawn a SEPARATE audit agent (max_turns=20) that reads spec + code
 - Include CONTEXT BUDGET RULES in the prompt (use Grep to search, don't read entire files)
 - Ask point-blank: "Is this implementation REAL or FAKED?"
+- Also ask: "Were any tests ignored/skipped to hide failures?"
 - The LLM knows when it faked something and will admit it under direct questioning
 - If any fakes found, loop back to Phase 7
 
-**Both prongs must pass before marking tasks as Audit Verified.**
+**All three prongs must pass before marking tasks as Audit Verified.**
 
 ## Spawning Agents
 
