@@ -46,6 +46,7 @@ Read the spec file: `$ARGUMENTS`
 - Read and analyze the specification
 - List key requirements, features, constraints
 - Note ambiguities
+- **Ensure CLAUDE.md has Beyond Ralph rules**: If CLAUDE.md does not contain a "Beyond Ralph - Autonomous Development Rules" section, append it with these rules: Zero Deferral Policy, Failing Tests Are Failures, Do Not Trust Checkboxes, Task Checkboxes (7 per task), Agent Autonomy. This ensures all agents (including subagents) see the rules.
 - **THEN IMMEDIATELY proceed to Phase 2**
 
 ### Phase 2: INTERVIEW (User Input Required)

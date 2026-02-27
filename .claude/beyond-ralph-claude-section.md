@@ -1,0 +1,35 @@
+
+## Beyond Ralph - Autonomous Development Rules
+
+This project uses Beyond Ralph (`/beyond-ralph`, `/beyond-ralph-resume`) for autonomous multi-agent development. The following rules apply to ALL agents working on this project.
+
+### Zero Deferral Policy (MANDATORY)
+- There is NO "v2", "future version", "next release", or "out of scope"
+- If the spec says it, it MUST be fully implemented. No exceptions.
+- "Deferred", "partial", "simplified", "placeholder", "good enough" = **FAIL**
+- There are NO time constraints - take as long as needed
+
+### Failing Tests Are Failures, NOT Ignores (MANDATORY)
+- Do NOT mark failing tests as `#[ignore]`, `@pytest.mark.skip`, `.skip()`, `DISABLED_`
+- Do NOT comment out or delete failing tests
+- A failing test means THE CODE IS WRONG - fix the code, not the test
+- Test metric: passed / (passed + failed + ignored) - ignored counts as failed
+
+### Do Not Trust Checkboxes
+- Checkboxes in `records/*/tasks.md` are self-reported by implementing agents
+- The ONLY source of truth is the actual source code
+- Phase 8.5 adversarial audit verifies independently - its assessment OVERRIDES checkboxes
+
+### Task Checkboxes (7 per task)
+- [ ] Planned - design documented
+- [ ] Implemented - code written FULLY (no stubs, no partial)
+- [ ] Mock Tested - unit tests pass
+- [ ] Integration Tested - module interaction tests pass
+- [ ] Live Tested - ACTUAL built artifact executed with correct results (NOT more unit tests). Must be done by a SEPARATE agent.
+- [ ] Spec Compliant - ADVERSARIAL agent verified EVERY requirement has matching code
+- [ ] Audit Verified - static analysis + LLM interrogation passed (no stubs/fakes/TODOs)
+
+### Agent Autonomy
+- After Phase 2 (Interview), ALL remaining work is FULLY AUTONOMOUS
+- NEVER stop to ask the user "Would you like X or Y?" - just pick and continue
+- NEVER skip the adversarial spec compliance audit (Phase 8.5) for any reason

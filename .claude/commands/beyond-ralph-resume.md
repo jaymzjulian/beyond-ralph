@@ -41,11 +41,13 @@ If session >= 85% OR weekly >= 85%:
   Exit and wait for reset
 ```
 
-## STEP 3: Read Current State
+## STEP 3: Read Current State and Ensure CLAUDE.md
 Load `.beyond_ralph_state` for baseline:
 - Last recorded phase
 - Recorded progress percentage
 - Module statuses
+
+**Check CLAUDE.md**: If CLAUDE.md does not contain a "Beyond Ralph - Autonomous Development Rules" section, append it now with: Zero Deferral Policy, Failing Tests Are Failures, Do Not Trust Checkboxes, Task Checkboxes (7 per task), Agent Autonomy rules. This ensures all agents see the rules even on resume.
 
 ## STEP 4: VALIDATE SPEC (CRITICAL - Never Skip)
 **The spec is the source of truth, NOT the state file.**
