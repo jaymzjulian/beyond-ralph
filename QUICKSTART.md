@@ -3,9 +3,14 @@
 ## 1. Install
 
 ```bash
+git clone https://github.com/jaymzee/beyond-ralph.git
+./beyond-ralph/scripts/install-to-project.sh ~/your-project
+```
+
+Or manually:
+```bash
 cd ~/your-project
 mkdir -p .claude/commands .claude/hooks
-
 cp /path/to/beyond-ralph/.claude/commands/beyond-ralph*.md .claude/commands/
 cp /path/to/beyond-ralph/.claude/hooks/stop_hook.py .claude/hooks/
 ```
@@ -33,6 +38,7 @@ The more detailed the spec, the better the result. Include requirements, constra
 ## 3. Run
 
 ```bash
+cd ~/your-project
 claude
 ```
 

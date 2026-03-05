@@ -43,13 +43,29 @@ chmod +x "$TARGET_PROJECT/.claude/hooks/stop_hook.py"
 
 # Create or merge settings.json
 SETTINGS_FILE="$TARGET_PROJECT/.claude/settings.json"
-if [ -f "$SETTINGS_FILE" ]; then
-    echo "Warning: settings.json exists, backing up to settings.json.bak"
-    cp "$SETTINGS_FILE" "$SETTINGS_FILE.bak"
-fi
 
-echo "Creating settings.json with stop hook..."
-cat > "$SETTINGS_FILE" << 'EOF'
+if [ -f "$SETTINGS_FILE" ]; then
+    # Check if the stop hook is already configured
+    if grep -q "stop_hook.py" "$SETTINGS_FILE"; then
+        echo "settings.json already has stop hook configured."
+    else
+        echo "Merging stop hook into existing settings.json..."
+        cp "$SETTINGS_FILE" "$SETTINGS_FILE.bak"
+        python3 << PYEOF
+import json
+settings_path = "$SETTINGS_FILE"
+with open(settings_path) as f:
+    s = json.load(f)
+hook = {"type": "command", "command": 'python3 "\$CLAUDE_PROJECT_DIR/.claude/hooks/stop_hook.py"', "timeout": 30}
+s.setdefault("hooks", {}).setdefault("Stop", [{"hooks": []}])
+s["hooks"]["Stop"][0].setdefault("hooks", []).append(hook)
+with open(settings_path, "w") as f:
+    json.dump(s, f, indent=2)
+PYEOF
+    fi
+else
+    echo "Creating settings.json with stop hook..."
+    cat > "$SETTINGS_FILE" << 'EOF'
 {
   "hooks": {
     "Stop": [
@@ -66,16 +82,19 @@ cat > "$SETTINGS_FILE" << 'EOF'
   }
 }
 EOF
+fi
 
-# Ensure beyond-ralph package is installed
-echo ""
-echo "Checking Beyond Ralph package installation..."
-if python3 -c "import beyond_ralph" 2>/dev/null; then
-    echo "Beyond Ralph package already installed."
-else
-    echo "Installing Beyond Ralph package..."
-    cd "$BEYOND_RALPH_ROOT"
-    uv pip install -e .
+# Append Beyond Ralph rules to CLAUDE.md if not already present
+CLAUDE_MD="$TARGET_PROJECT/CLAUDE.md"
+BR_SECTION="$BEYOND_RALPH_ROOT/.claude/beyond-ralph-claude-section.md"
+if [ -f "$BR_SECTION" ]; then
+    if [ -f "$CLAUDE_MD" ] && grep -q "Beyond Ralph - Autonomous Development Rules" "$CLAUDE_MD"; then
+        echo "CLAUDE.md already has Beyond Ralph rules."
+    else
+        echo "Appending Beyond Ralph rules to CLAUDE.md..."
+        echo "" >> "$CLAUDE_MD"
+        cat "$BR_SECTION" >> "$CLAUDE_MD"
+    fi
 fi
 
 echo ""
@@ -91,7 +110,8 @@ echo "  .claude/commands/beyond-ralph-resume.md"
 echo "  .claude/commands/beyond-ralph-status.md"
 echo "  .claude/hooks/stop_hook.py"
 echo "  .claude/settings.json"
+echo "  CLAUDE.md (Beyond Ralph rules appended)"
 echo ""
 echo "To start development, open the project in Claude Code and run:"
-echo "  /beyond-ralph start --spec SPEC.md"
+echo "  /beyond-ralph SPEC.md"
 echo ""

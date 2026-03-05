@@ -337,7 +337,7 @@ cat .beyond_ralph_state | python -m json.tool
 
 If issues persist:
 
-1. Check the [GitHub Issues](https://github.com/your-org/beyond-ralph/issues)
+1. Check the [GitHub Issues](https://github.com/jaymzee/beyond-ralph/issues)
 2. Review recent knowledge base entries for error patterns
 3. Run the diagnostic command:
    ```bash

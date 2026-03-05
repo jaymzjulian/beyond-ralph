@@ -17,23 +17,48 @@ Beyond Ralph runs **inside Claude Code** as a set of slash commands. It reads yo
 
 ## Installation
 
-### Quick Install (Recommended)
+### Install Script (Recommended)
 
-Copy the command files and stop hook to your project:
+```bash
+# Clone beyond-ralph
+git clone https://github.com/jaymzee/beyond-ralph.git
+
+# Run the installer
+./beyond-ralph/scripts/install-to-project.sh ~/your-project
+```
+
+This copies the commands, stop hook, and settings.json, and appends Beyond Ralph rules to your CLAUDE.md.
+
+### Python CLI Installer (Full Setup)
+
+If you install the Beyond Ralph package, you get a richer installer with MCP server configs and SuperClaude commands:
+
+```bash
+cd beyond-ralph
+uv pip install -e .
+
+# Minimal install (just Beyond Ralph)
+beyond-ralph install ~/your-project --minimal
+
+# Full install (includes MCP servers and SuperClaude)
+beyond-ralph install ~/your-project
+
+# With free-tier MCP servers (Brave, Tavily, GitHub, Sentry)
+beyond-ralph install ~/your-project --allow-free-tier-with-key
+```
+
+### Manual Install
 
 ```bash
 cd ~/your-project
-
-# Create directories
 mkdir -p .claude/commands .claude/hooks
 
-# Copy commands and hook
 cp /path/to/beyond-ralph/.claude/commands/beyond-ralph*.md .claude/commands/
 cp /path/to/beyond-ralph/.claude/hooks/stop_hook.py .claude/hooks/
-
-# Optional: append the Beyond Ralph rules to your CLAUDE.md
 cat /path/to/beyond-ralph/.claude/beyond-ralph-claude-section.md >> CLAUDE.md
 ```
+
+You'll also need to create `.claude/settings.json` with the stop hook configured — see `scripts/install-to-project.sh` for the format.
 
 ### What Gets Installed
 

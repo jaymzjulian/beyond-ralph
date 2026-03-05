@@ -16,7 +16,7 @@ Thank you for your interest in contributing to Beyond Ralph. This guide will hel
 ### Clone and Install
 
 ```bash
-git clone https://github.com/your-org/beyond-ralph.git
+git clone https://github.com/jaymzee/beyond-ralph.git
 cd beyond-ralph
 uv sync
 ```

@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 if TYPE_CHECKING:
@@ -364,7 +363,7 @@ def check_npm_available() -> bool:
 
 
 def install_mcp_servers(
-    target_path: Path,
+    target_path: Path,  # noqa: ARG001
     servers: dict,
     install_packages: bool = False,
 ) -> dict:
@@ -426,11 +425,11 @@ def create_settings_json(
         settings["mcpServers"] = mcp_servers
 
     if target_settings.exists() and not force:
-        console.print(f"  [yellow]Exists[/yellow] settings.json")
+        console.print("  [yellow]Exists[/yellow] settings.json")
         return
 
     target_settings.write_text(json.dumps(settings, indent=2))
-    console.print(f"  [green]Created[/green] settings.json")
+    console.print("  [green]Created[/green] settings.json")
 
 
 def install_to_project(
@@ -558,6 +557,19 @@ def install_to_project(
                             console.print(f"         Sign up: {info['signup_url']}")
     else:
         mcp_config = None
+
+    # === CLAUDE.md Rules ===
+    console.print("\n[bold]Setting up CLAUDE.md rules...[/bold]")
+    claude_md_path = target_path / "CLAUDE.md"
+    br_section = package_root / ".claude" / "beyond-ralph-claude-section.md"
+    if br_section.exists():
+        section_text = br_section.read_text()
+        if claude_md_path.exists() and "Beyond Ralph - Autonomous Development Rules" in claude_md_path.read_text():
+            console.print("  [yellow]Exists[/yellow] CLAUDE.md already has Beyond Ralph rules")
+        else:
+            with open(claude_md_path, "a") as f:
+                f.write("\n" + section_text)
+            console.print("  [green]Appended[/green] Beyond Ralph rules to CLAUDE.md")
 
     # === Settings ===
     console.print("\n[bold]Creating configuration...[/bold]")

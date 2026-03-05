@@ -2,130 +2,149 @@
 
 ## Prerequisites
 
-- **Python 3.11+**: Beyond Ralph requires Python 3.11 or later
-- **uv**: The recommended package manager (https://github.com/astral-sh/uv)
-- **Claude Code**: The Anthropic CLI tool (https://claude.ai/code)
+- **Claude Code**: The Anthropic CLI tool
+- **Python 3.11+**: Required for the stop hook
 
-## Quick Install
+Optional (for the Python CLI installer):
+- **uv**: Package manager (https://github.com/astral-sh/uv)
+
+## Method 1: Install Script (Recommended)
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/beyond-ralph.git
+git clone https://github.com/jaymzee/beyond-ralph.git
+./beyond-ralph/scripts/install-to-project.sh ~/your-project
+```
+
+This installs:
+- Beyond Ralph commands (`/beyond-ralph`, `/beyond-ralph-resume`, `/beyond-ralph-status`)
+- Stop hook for autonomous operation
+- `.claude/settings.json` with hook configuration
+- Beyond Ralph rules appended to your CLAUDE.md
+
+## Method 2: Python CLI Installer (Full Setup)
+
+Install the Beyond Ralph package first, then use the CLI:
+
+```bash
 cd beyond-ralph
+uv pip install -e .
 
-# Install with uv
-uv sync
+# Minimal (just Beyond Ralph)
+beyond-ralph install ~/your-project --minimal
 
-# Verify installation
-uv run python -c "import beyond_ralph; print('Beyond Ralph installed successfully')"
+# Full (includes MCP servers, SuperClaude commands)
+beyond-ralph install ~/your-project
+
+# With free-tier MCP servers
+beyond-ralph install ~/your-project --allow-free-tier-with-key
 ```
 
-## Manual Installation
+### CLI Options
 
-If you prefer pip:
+| Flag | Effect |
+|------|--------|
+| `--minimal` | Only Beyond Ralph commands + hook |
+| `--force` | Overwrite existing files |
+| `--no-superclaude` | Skip SuperClaude commands and skills |
+| `--no-mcp` | Skip MCP server configuration |
+| `--install-mcp-packages` | Actually install MCP packages via npm |
+| `--allow-free-tier-with-key` | Include Brave, Tavily, GitHub, Sentry MCP servers |
+
+### MCP Servers Included (no API key)
+
+| Server | Purpose |
+|--------|---------|
+| sequential-thinking | Problem-solving through thought sequences |
+| context7 | Library documentation lookup |
+| playwright | Browser automation for testing |
+| duckduckgo | Web search |
+| arxiv | Academic paper search |
+| wikipedia | Wikipedia search |
+| filesystem | File operations |
+| memory | Persistent memory |
+| git | Git operations |
+| fetch | Web content fetching |
+| time | Timezone operations |
+| sqlite | Database operations |
+
+## Method 3: Manual Install
 
 ```bash
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+cd ~/your-project
+mkdir -p .claude/commands .claude/hooks
 
-# Install dependencies
-pip install .
+# Copy commands
+cp /path/to/beyond-ralph/.claude/commands/beyond-ralph*.md .claude/commands/
 
-# Verify
-python -c "import beyond_ralph; print('Beyond Ralph installed successfully')"
+# Copy stop hook
+cp /path/to/beyond-ralph/.claude/hooks/stop_hook.py .claude/hooks/
+
+# Append rules to CLAUDE.md
+cat /path/to/beyond-ralph/.claude/beyond-ralph-claude-section.md >> CLAUDE.md
 ```
 
-## Claude Code Setup
+Then create `.claude/settings.json`:
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop_hook.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
-Beyond Ralph runs as a Claude Code plugin. To enable it:
+## What Gets Installed
 
-1. Copy the skills to your Claude Code configuration:
-   ```bash
-   mkdir -p ~/.claude/skills
-   cp .claude/skills/*.yaml ~/.claude/skills/
-   ```
-
-2. Copy the hooks:
-   ```bash
-   mkdir -p ~/.claude/hooks
-   cp .claude/hooks/*.yaml ~/.claude/hooks/
-   ```
-
-3. Verify the skills are available:
-   ```bash
-   claude --help
-   # You should see /beyond-ralph commands listed
-   ```
-
-## Dependencies
-
-Beyond Ralph includes these core dependencies:
-
-| Dependency | Purpose |
-|-----------|---------|
-| pexpect | CLI spawning and interaction |
-| typer | Command-line interface |
-| rich | Terminal output formatting |
-| httpx | HTTP client for API testing |
-| pyyaml | Configuration file parsing |
-| pillow | Screenshot analysis |
-
-Optional dependencies for extended testing:
-
-| Dependency | Purpose |
-|-----------|---------|
-| playwright | Web UI testing |
-| pyautogui | Desktop GUI interaction |
-| opencv-python | Video/image analysis |
-
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `BEYOND_RALPH_SAFEMODE` | Enable permission prompts | `false` |
-| `BEYOND_RALPH_QUOTA_CACHE` | Quota cache file location | `.beyond_ralph_quota` |
-| `BEYOND_RALPH_MAX_AGENTS` | Maximum parallel agents | `7` |
+| File | Purpose |
+|------|---------|
+| `.claude/commands/beyond-ralph.md` | Main orchestrator — `/beyond-ralph SPEC.md` |
+| `.claude/commands/beyond-ralph-resume.md` | Resume or re-validate — `/beyond-ralph-resume` |
+| `.claude/commands/beyond-ralph-status.md` | Check progress — `/beyond-ralph-status` |
+| `.claude/hooks/stop_hook.py` | Keeps the orchestrator running autonomously |
+| `.claude/settings.json` | Hook configuration |
+| `CLAUDE.md` (appended) | Beyond Ralph rules for all agents |
 
 ## Verifying Installation
 
-Run the test suite:
-
 ```bash
-uv run pytest tests/unit -q
+cd ~/your-project
+claude
 ```
 
-Expected output:
-```
-854 passed in 30s
-```
+Then type `/beyond-ralph` — you should see the command available.
 
 ## Troubleshooting
 
-### "Claude CLI not found"
+### Stop hook not firing
 
-Ensure Claude Code is installed and in your PATH:
+Check that `.claude/settings.json` exists and has the correct hook configuration. The hook type must be `"command"` and the path must point to the stop hook script.
+
+### "Permission denied" on stop_hook.py
+
 ```bash
-which claude
-# Should output something like /usr/local/bin/claude
-```
-
-### "Permission denied" errors
-
-Beyond Ralph may need sudo access for system package installation. Check if passwordless sudo is available:
-```bash
-sudo -n true && echo "Passwordless sudo available" || echo "Sudo requires password"
+chmod +x .claude/hooks/stop_hook.py
 ```
 
 ### Quota errors
 
-If you see quota-related errors, check your Claude usage:
+Beyond Ralph monitors Claude usage and pauses automatically. Check status with:
 ```bash
 uv run br-quota
 ```
 
+Or just wait — it will resume when quota resets.
+
 ## Next Steps
 
-- [Quick Start Guide](quickstart.md) - Get started with your first project
+- [Quick Start](../../QUICKSTART.md) - Get started with your first project
 - [Configuration](configuration.md) - Customize Beyond Ralph
-- [Testing Guide](testing.md) - Learn about testing capabilities
+- [Testing Guide](testing.md) - Testing capabilities
