@@ -231,7 +231,7 @@ Beyond Ralph's Research Agent can discover and install:
 
 ### Checkboxes
 
-Each task has 6 checkboxes:
+Each task has 7 checkboxes:
 
 | Checkbox | Description | Agent Responsible |
 |----------|-------------|-------------------|

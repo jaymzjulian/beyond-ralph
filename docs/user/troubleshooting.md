@@ -166,7 +166,7 @@ uv pip install -e .
    ```bash
    grep -r "\[.\]" records/
    ```
-2. Verify all 6 checkboxes are checked
+2. Verify all 7 checkboxes are checked
 3. Check for test failures in evidence
 
 ### Knowledge Base Issues

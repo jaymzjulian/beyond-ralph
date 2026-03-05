@@ -2,16 +2,20 @@
 
 ## Quick Start
 
-### Option 1: Install Commands Globally (Recommended)
+### Option 1: Install to a Specific Project (Recommended)
 
-Copy the command files to your global Claude commands directory:
+Copy commands and stop hook to your project:
 
 ```bash
-# Create commands directory if it doesn't exist
-mkdir -p ~/.claude/commands
+cd /path/to/your/project
+mkdir -p .claude/commands .claude/hooks
 
-# Copy Beyond Ralph commands
-cp /path/to/beyond-ralph/.claude/commands/*.md ~/.claude/commands/
+# Copy Beyond Ralph commands and stop hook
+cp /path/to/beyond-ralph/.claude/commands/beyond-ralph*.md .claude/commands/
+cp /path/to/beyond-ralph/.claude/hooks/stop_hook.py .claude/hooks/
+
+# Optional: add Beyond Ralph rules to CLAUDE.md
+cat /path/to/beyond-ralph/.claude/beyond-ralph-claude-section.md >> CLAUDE.md
 ```
 
 Then in ANY project:
@@ -143,7 +147,7 @@ your-project/
 
 ## Task Tracking
 
-Each task in `records/*/tasks.md` has 5 checkboxes:
+Each task in `records/*/tasks.md` has 7 checkboxes:
 
 ```markdown
 ### Task: Implement User Login
@@ -152,9 +156,11 @@ Each task in `records/*/tasks.md` has 5 checkboxes:
 - [x] Mock Tested
 - [ ] Integration Tested
 - [ ] Live Tested
+- [ ] Spec Compliant
+- [ ] Audit Verified
 ```
 
-A task is only complete when ALL 5 are checked.
+A task is only complete when ALL 7 are checked. Checkboxes are self-reported by agents and independently verified by an adversarial audit (Phase 8.5).
 
 ## Quota Management
 

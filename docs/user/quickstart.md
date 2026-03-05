@@ -90,7 +90,7 @@ Your project is now complete with:
 - Implemented code
 - Unit tests
 - Documentation
-- All 6 checkboxes checked for each task
+- All 7 checkboxes checked for each task
 
 Check the task status:
 ```
@@ -108,7 +108,7 @@ Check the task status:
 
 ## Development Phases
 
-Beyond Ralph follows 8 phases:
+Beyond Ralph follows 10 phases (including 8.5 and 9):
 
 1. **Spec Ingestion**: Reads and analyzes your specification
 2. **Interview**: Asks clarifying questions

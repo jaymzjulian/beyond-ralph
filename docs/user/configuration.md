@@ -164,6 +164,7 @@ PostgreSQL selected for production database.
 - [ ] Integration tested
 - [ ] Live tested
 - [ ] Spec compliant
+- [ ] Audit verified
 
 **Description**: Implement OAuth2 authentication flow...
 
@@ -175,11 +176,12 @@ PostgreSQL selected for production database.
 | Checkbox | Meaning |
 |----------|---------|
 | Planned | Task has been designed |
-| Implemented | Code has been written |
-| Mock tested | Unit tests pass |
-| Integration tested | Integration tests pass |
-| Live tested | Works in real environment |
-| Spec compliant | Verified by compliance agent |
+| Implemented | Code written fully (no stubs, no partial, no deferred) |
+| Mock tested | Unit tests with mocks/stubs pass |
+| Integration tested | Module interaction tests pass |
+| Live tested | Actual built artifact executed with correct results (by separate agent) |
+| Spec compliant | Adversarial agent verified every requirement has matching code |
+| Audit verified | Static analysis + LLM interrogation passed (no stubs/fakes/TODOs) |
 
 ## Testing Configuration
 

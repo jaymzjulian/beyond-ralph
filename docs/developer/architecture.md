@@ -32,7 +32,7 @@ Beyond Ralph is a multi-agent orchestration system that runs within Claude Code.
 **Location**: `src/beyond_ralph/core/orchestrator.py`
 
 The central coordinator that manages:
-- Phase transitions (8 phases)
+- Phase transitions (10 phases (including 8.5 and 9))
 - Agent spawning and coordination
 - State persistence and recovery
 - Quota management
@@ -81,7 +81,7 @@ Shared knowledge storage:
 **Location**: `src/beyond_ralph/core/records.py`
 
 Task tracking system:
-- 6-checkbox tracking per task
+- 7-checkbox tracking per task
 - Module-based organization
 - Markdown format for human readability
 - Task completion detection
@@ -89,7 +89,7 @@ Task tracking system:
 **Key Classes**:
 - `RecordsManager`: Records coordinator
 - `Task`: Task with checkboxes
-- `Checkbox`: The 6 checkbox types
+- `Checkbox`: The 7 checkbox types
 
 ### Quota Manager
 

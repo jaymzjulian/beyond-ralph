@@ -5,6 +5,33 @@ All notable changes to Beyond Ralph will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-05
+
+### Integrity Overhaul
+
+Fundamentally strengthened how Beyond Ralph verifies agent work, based on real-world experience where agents were rubber-stamping their own implementations.
+
+### Added
+- **Adversarial Spec Compliance (Phase 8.5)**: Two-pass verification — requirement extraction agent + adversarial audit agent. Each requirement gets a PASS/FAIL with file:line evidence.
+- **Zero Deferral Policy**: "Deferred to v2", "simplified version", "placeholder" = FAIL. No exceptions.
+- **Failing Tests Are Failures**: `#[ignore]`, `@pytest.mark.skip`, `DISABLED_` are caught and rejected. Ignored tests count as failures.
+- **Don't Trust Checkboxes**: Adversarial audit verifies against actual source code, overrides self-reported checkbox states.
+- **7th Checkbox (Audit Verified)**: Static analysis + LLM interrogation for stubs, fakes, and TODOs.
+- **Live Testing for Android/iOS/Desktop GUI**: Step-by-step `adb`, emulator, `xcodebuild`, `xdotool` instructions.
+- **Auto-create CLAUDE.md rules**: Phase 1 and resume append Beyond Ralph rules to target project's CLAUDE.md.
+- **Anti-excuse prompts**: Explicit lists of unacceptable excuses for skipping audits.
+- **Autonomy enforcement**: Never stops to ask "would you like X or Y?"
+
+### Changed
+- Spec compliance ALWAYS runs, even if all checkboxes show 7/7
+- Resume spawns SEPARATE adversarial agent instead of self-validating
+- Phase 8 split: 8a (mock+integration), 8c (live artifact testing)
+- `SpecComplianceAgent` rewritten with per-requirement PASS/FAIL checklist
+
+### Fixed
+- Stop hook: AUTOMATION_COMPLETE false positives, stale prompt loops, state override bugs
+- Quota checking: Uses OAuth API for reliable results
+
 ## [0.1.0] - 2026-02-04
 
 ### 🎉 Initial Release
@@ -14,11 +41,11 @@ Beyond Ralph is a Claude Code plugin for fully autonomous multi-agent developmen
 ### Added
 
 #### Core Features
-- **Orchestrator**: Multi-agent coordination with phase-based development (8 phases)
+- **Orchestrator**: Multi-agent coordination with phase-based development (10 phases)
 - **Session Management**: UUID-based agent spawning and tracking
 - **Quota Management**: Automatic pause/resume when Claude quota limits approached
 - **Knowledge Base**: Shared knowledge store in `beyondralph_knowledge/`
-- **Record Keeping**: Per-module task tracking with 6-checkbox verification system
+- **Record Keeping**: Per-module task tracking with 7-checkbox verification system
 
 #### Agents
 - **Spec Agent**: Specification ingestion and analysis

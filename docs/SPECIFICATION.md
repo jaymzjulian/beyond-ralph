@@ -60,7 +60,7 @@ Beyond Ralph is an autonomous multi-agent development system for Claude Code tha
 ### Responsibilities
 
 1. **Ralph-Loop Persistence**
-   - Continue until ALL tasks have 5/5 checkboxes
+   - Continue until ALL tasks have 7/7 checkboxes
    - Use Stop hook for persistence
    - Only pause for quota limits or fatal errors
 
@@ -506,7 +506,7 @@ class KnowledgeBase:
 
 **Location**: `src/beyond_ralph/core/records.py`
 **Dependencies**: None (foundational)
-**Provides**: Task tracking with 5 checkboxes
+**Provides**: Task tracking with 7 checkboxes
 
 ### Task Format
 
@@ -546,10 +546,10 @@ class RecordsManager:
         """Get all tasks for module."""
 
     async def get_incomplete_tasks(self) -> list[Task]:
-        """Get tasks without 5/5 checkboxes."""
+        """Get tasks without 7/7 checkboxes."""
 
     async def is_complete(self) -> bool:
-        """Check if ALL tasks have 5/5 checkboxes."""
+        """Check if ALL tasks have 7/7 checkboxes."""
 ```
 
 ### Checkbox Enum
@@ -923,7 +923,7 @@ A module is complete when:
 5. ✅ Documentation complete
 6. ✅ Evidence generated
 7. ✅ Validated by separate agent
-8. ✅ 5/5 checkboxes in records
+8. ✅ 7/7 checkboxes in records
 
 ---
 

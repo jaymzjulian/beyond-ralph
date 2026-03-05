@@ -103,5 +103,7 @@ Thumbs.db
 logs/
 
 # Beyond Ralph runtime files
+.beyond_ralph_state
 .beyond_ralph_quota
 .beyond_ralph_sessions/
+.beyond_ralph_hook_debug.log
