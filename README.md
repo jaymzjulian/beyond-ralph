@@ -68,6 +68,7 @@ You'll also need to create `.claude/settings.json` with the stop hook configured
 | `.claude/commands/beyond-ralph-resume.md` | Resume or re-validate — `/beyond-ralph-resume` |
 | `.claude/commands/beyond-ralph-status.md` | Check progress — `/beyond-ralph-status` |
 | `.claude/hooks/stop_hook.py` | Keeps the orchestrator running autonomously |
+| `.claude/hooks/post_compact_hook.py` | Re-reads spec/plan/tasks after context compaction |
 
 ## Usage
 

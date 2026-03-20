@@ -416,6 +416,17 @@ def create_settings_json(
                         }
                     ]
                 }
+            ],
+            "PostCompact": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": 'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/post_compact_hook.py"',
+                            "timeout": 15
+                        }
+                    ]
+                }
             ]
         }
     }
@@ -500,15 +511,16 @@ def install_to_project(
 
     # Copy hooks
     console.print("\n[bold]Installing hooks...[/bold]")
-    hook_src = source_hooks / "stop_hook.py"
-    hook_dst = target_hooks / "stop_hook.py"
-    if hook_src.exists():
-        if hook_dst.exists() and not force:
-            console.print("  [yellow]Exists[/yellow] stop_hook.py")
-        else:
-            shutil.copy2(hook_src, hook_dst)
-            hook_dst.chmod(0o755)
-            console.print("  [green]Copied[/green] stop_hook.py")
+    for hook_name in ["stop_hook.py", "post_compact_hook.py"]:
+        hook_src = source_hooks / hook_name
+        hook_dst = target_hooks / hook_name
+        if hook_src.exists():
+            if hook_dst.exists() and not force:
+                console.print(f"  [yellow]Exists[/yellow] {hook_name}")
+            else:
+                shutil.copy2(hook_src, hook_dst)
+                hook_dst.chmod(0o755)
+                console.print(f"  [green]Copied[/green] {hook_name}")
 
     if not minimal:
         # === SuperClaude Commands ===

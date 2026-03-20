@@ -37,34 +37,39 @@ cp "$BEYOND_RALPH_ROOT/.claude/commands/beyond-ralph-resume.md" "$TARGET_PROJECT
 cp "$BEYOND_RALPH_ROOT/.claude/commands/beyond-ralph-status.md" "$TARGET_PROJECT/.claude/commands/"
 
 # Copy hooks
-echo "Copying stop hook..."
+echo "Copying hooks..."
 cp "$BEYOND_RALPH_ROOT/.claude/hooks/stop_hook.py" "$TARGET_PROJECT/.claude/hooks/"
+cp "$BEYOND_RALPH_ROOT/.claude/hooks/post_compact_hook.py" "$TARGET_PROJECT/.claude/hooks/"
 chmod +x "$TARGET_PROJECT/.claude/hooks/stop_hook.py"
+chmod +x "$TARGET_PROJECT/.claude/hooks/post_compact_hook.py"
 
 # Create or merge settings.json
 SETTINGS_FILE="$TARGET_PROJECT/.claude/settings.json"
 
 if [ -f "$SETTINGS_FILE" ]; then
-    # Check if the stop hook is already configured
-    if grep -q "stop_hook.py" "$SETTINGS_FILE"; then
-        echo "settings.json already has stop hook configured."
-    else
-        echo "Merging stop hook into existing settings.json..."
-        cp "$SETTINGS_FILE" "$SETTINGS_FILE.bak"
-        python3 << PYEOF
+    echo "Merging hooks into existing settings.json..."
+    cp "$SETTINGS_FILE" "$SETTINGS_FILE.bak"
+    python3 << PYEOF
 import json
 settings_path = "$SETTINGS_FILE"
 with open(settings_path) as f:
     s = json.load(f)
-hook = {"type": "command", "command": 'python3 "\$CLAUDE_PROJECT_DIR/.claude/hooks/stop_hook.py"', "timeout": 30}
-s.setdefault("hooks", {}).setdefault("Stop", [{"hooks": []}])
-s["hooks"]["Stop"][0].setdefault("hooks", []).append(hook)
+hooks = s.setdefault("hooks", {})
+# Stop hook
+if not any("stop_hook.py" in str(h) for h in hooks.get("Stop", [])):
+    stop_hook = {"type": "command", "command": 'python3 "\$CLAUDE_PROJECT_DIR/.claude/hooks/stop_hook.py"', "timeout": 30}
+    hooks.setdefault("Stop", [{"hooks": []}])
+    hooks["Stop"][0].setdefault("hooks", []).append(stop_hook)
+# PostCompact hook
+if not any("post_compact_hook.py" in str(h) for h in hooks.get("PostCompact", [])):
+    compact_hook = {"type": "command", "command": 'python3 "\$CLAUDE_PROJECT_DIR/.claude/hooks/post_compact_hook.py"', "timeout": 15}
+    hooks.setdefault("PostCompact", [{"hooks": []}])
+    hooks["PostCompact"][0].setdefault("hooks", []).append(compact_hook)
 with open(settings_path, "w") as f:
     json.dump(s, f, indent=2)
 PYEOF
-    fi
 else
-    echo "Creating settings.json with stop hook..."
+    echo "Creating settings.json with hooks..."
     cat > "$SETTINGS_FILE" << 'EOF'
 {
   "hooks": {
@@ -75,6 +80,17 @@ else
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop_hook.py\"",
             "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/post_compact_hook.py\"",
+            "timeout": 15
           }
         ]
       }
@@ -109,6 +125,7 @@ echo "  .claude/commands/beyond-ralph.md"
 echo "  .claude/commands/beyond-ralph-resume.md"
 echo "  .claude/commands/beyond-ralph-status.md"
 echo "  .claude/hooks/stop_hook.py"
+echo "  .claude/hooks/post_compact_hook.py"
 echo "  .claude/settings.json"
 echo "  CLAUDE.md (Beyond Ralph rules appended)"
 echo ""
