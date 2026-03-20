@@ -573,29 +573,27 @@ class TestSessionManager:
 3. Refactor while keeping tests green
 4. Commit
 
-## Context Management - CRITICAL
+## Quality Over Speed - CRITICAL
 
-**The orchestrator MUST minimize its context usage.**
+**Optimise for the final codebase, not for getting through phases quickly.**
 
-### Aggressive Agent Delegation
+### Principles
 
-The orchestrator should:
-- **Delegate to agents aggressively** - don't do work in the orchestrator
-- **Keep orchestrator context lean** - only coordination, not implementation
-- **Use agents for ALL research** - don't read files directly, spawn agents
-- **Use agents for ALL implementation** - orchestrator never writes code
-- **Use agents for ALL testing** - orchestrator validates evidence, doesn't run tests
+1. **Long-term outcomes over short-term wins** — A refactored, well-designed codebase is worth more than a fast first pass that needs rework later. If restructuring now prevents tech debt, do it.
+2. **Understand before you change** — Agents should read enough of the codebase to understand existing patterns and conventions before writing new code. Blind narrow patches create inconsistency.
+3. **Refactor when it helps** — If an agent encounters duplication, bad patterns, or unclear code while working on a task, it should refactor. Don't leave code worse than you found it.
+4. **Don't optimise for "this session"** — The project may span many sessions and agents. Every agent should write code as if it's the final version, not a draft that someone will clean up later.
+5. **Fewer, better files** — Prefer well-designed modules over many scattered fragments. Consolidate when it makes the codebase clearer.
+6. **Code review standards** — Write code a senior engineer would approve. If you wouldn't put it in a PR at work, don't commit it here.
+
+### Agent Delegation
+
+The orchestrator should delegate to agents for implementation, testing, and research. Each agent works in its own context window, so the orchestrator stays focused on coordination:
 
 ```
-WRONG (fills orchestrator context):
-[ORCHESTRATOR] Reading src/module.py...
-[ORCHESTRATOR] Analyzing 500 lines of code...
-[ORCHESTRATOR] Writing implementation...
-
-CORRECT (delegates to agents):
 [ORCHESTRATOR] Spawning implementation agent for module.py
-[AGENT:impl-xyz] <does all the work in its own context>
-[ORCHESTRATOR] Received result: "Module implemented, 3 files changed"
+[AGENT:impl-xyz] <understands codebase, implements with quality, refactors as needed>
+[ORCHESTRATOR] Received result: "Module implemented, 2 files refactored, 3 files changed"
 ```
 
 ### Compaction Recovery Protocol (MANDATORY)

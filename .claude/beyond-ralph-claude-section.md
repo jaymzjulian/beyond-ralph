@@ -3,6 +3,14 @@
 
 This project uses Beyond Ralph (`/beyond-ralph`, `/beyond-ralph-resume`) for autonomous multi-agent development. The following rules apply to ALL agents working on this project.
 
+### Quality Over Speed (MANDATORY)
+- Optimise for the **final codebase**, not for getting through phases quickly
+- Read enough of the existing code to understand patterns before writing new code
+- If you see duplication, bad patterns, or unclear code while working, **refactor it**
+- Do not optimise for "this session" - write code as if it's the final version
+- Prefer fewer, well-designed files over many scattered fragments
+- Write code a senior engineer would approve in a code review
+
 ### Zero Deferral Policy (MANDATORY)
 - There is NO "v2", "future version", "next release", or "out of scope"
 - If the spec says it, it MUST be fully implemented. No exceptions.

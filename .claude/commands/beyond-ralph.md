@@ -87,6 +87,16 @@ Task(
     max_turns=25,
     prompt="Implement [specific task] per records/[module]/spec.md using TDD.
 
+QUALITY OVER SPEED (MANDATORY):
+- The goal is a production-quality codebase, not a fast first draft
+- Read enough of the existing code to understand conventions and patterns before writing
+- If you see duplication, bad patterns, or unclear code while working, REFACTOR IT
+- Think about the long-term maintainability of every decision you make
+- Do not optimise for 'this session' - optimise for the final codebase someone inherits
+- If a better architecture becomes apparent while implementing, restructure
+- Prefer fewer, well-designed files over many small scattered ones
+- Write code a senior engineer would approve in a code review
+
 ZERO DEFERRAL POLICY (MANDATORY):
 - You MUST fully implement everything described in the spec for this task
 - Do NOT defer anything to 'v2', 'future work', or 'next version'
@@ -103,13 +113,13 @@ FAILING TESTS ARE FAILURES, NOT IGNORES (MANDATORY):
 - If a test fails because the feature isn't implemented, IMPLEMENT THE FEATURE
 - '100% tests pass' with ignored tests is a LIE and will be caught by the audit
 
-CONTEXT BUDGET RULES:
-- Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)
-- Read only the functions/sections you need to modify
-- Do NOT explore the whole codebase - focus ONLY on your specific task
-- If a file is large, read only the relevant section using offset/limit
-- Write targeted changes, not full file rewrites
-- Limit yourself to the files directly related to your task
+CODE QUALITY RULES:
+- Understand before you change: read enough of the codebase to make informed decisions
+- If the existing code has a pattern, follow it. If the pattern is bad, refactor it.
+- Refactor when it improves clarity, reduces duplication, or makes the code easier to extend
+- Do NOT leave code worse than you found it - clean up what you touch
+- Prefer simple, readable code over clever code
+- The goal is a codebase you'd be proud to hand off, not just code that passes tests
 
 Update records/[module]/tasks.md checkboxes when done."
 )
@@ -353,18 +363,18 @@ Task(
 )
 ```
 
-### Context-Efficient Agent Prompts (MANDATORY)
+### Code Quality Agent Prompts (MANDATORY)
 
-Every agent prompt MUST include these instructions to prevent context exhaustion:
+Every agent prompt MUST include these instructions to ensure quality outcomes:
 
 ```
-CONTEXT BUDGET RULES:
-- Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)
-- Read only the functions/sections you need to modify
-- Do NOT explore the whole codebase - focus on your specific task
-- If a file is large, read only the relevant section using offset/limit
-- Write targeted changes, not full file rewrites
-- Limit yourself to the files directly related to your task
+CODE QUALITY RULES:
+- Understand before you change: read enough of the codebase to make informed decisions
+- If the existing code has a pattern, follow it. If the pattern is bad, refactor it.
+- Refactor when it improves clarity, reduces duplication, or makes the code easier to extend
+- Do NOT leave code worse than you found it - clean up what you touch
+- Prefer simple, readable code over clever code
+- The goal is a codebase you'd be proud to hand off, not just code that passes tests
 ```
 
 ### Breaking Large Modules Into Subtasks

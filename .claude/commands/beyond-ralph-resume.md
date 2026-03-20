@@ -114,7 +114,7 @@ Do NOT skip anything. Do NOT summarize or combine.
 If in doubt whether something is a requirement, INCLUDE IT.
 Be EXHAUSTIVE - missing a requirement here means it never gets checked.
 
-CONTEXT BUDGET RULES: [standard rules]"
+CODE QUALITY RULES: [standard rules]"
 )
 ```
 
@@ -175,7 +175,7 @@ CRITICAL FAILURES (if any):
 
 ANY single FAIL = SPEC_COMPLIANCE_RESULT: FAIL
 
-CONTEXT BUDGET RULES: [standard rules]"
+CODE QUALITY RULES: [standard rules]"
 )
 ```
 
@@ -265,6 +265,14 @@ When spawning agents via the Task tool, ALWAYS:
 
 3. **Include these MANDATORY rules in every agent prompt**:
 ```
+QUALITY OVER SPEED (MANDATORY):
+- The goal is a production-quality codebase, not a fast first draft
+- Read enough of the existing code to understand conventions and patterns before writing
+- If you see duplication, bad patterns, or unclear code while working, REFACTOR IT
+- Do not optimise for 'this session' - optimise for the final codebase someone inherits
+- Prefer fewer, well-designed files over many small scattered ones
+- Write code a senior engineer would approve in a code review
+
 ZERO DEFERRAL POLICY (MANDATORY):
 - You MUST fully implement everything described in the spec for this task
 - Do NOT defer anything to 'v2', 'future work', or 'next version'
@@ -277,12 +285,11 @@ FAILING TESTS ARE FAILURES, NOT IGNORES (MANDATORY):
 - A failing test means THE CODE IS WRONG - fix the code, not the test
 - Reporting '100% pass' with ignored tests is a LIE and will be caught by the audit
 
-CONTEXT BUDGET RULES:
-- Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)
-- Read only the functions/sections you need to modify
-- Do NOT explore the whole codebase - focus ONLY on your specific task
-- If a file is large, read only the relevant section using offset/limit
-- Write targeted changes, not full file rewrites
+CODE QUALITY RULES:
+- Understand before you change: read enough of the codebase to make informed decisions
+- If the existing code has a pattern, follow it. If the pattern is bad, refactor it.
+- Refactor when it improves clarity, reduces duplication, or makes the code easier to extend
+- Do NOT leave code worse than you found it - clean up what you touch
 ```
 
 ## Spec Change Detection

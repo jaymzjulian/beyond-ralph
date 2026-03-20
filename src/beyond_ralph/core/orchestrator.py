@@ -19,16 +19,23 @@ from beyond_ralph.core.session_manager import SessionOutput, SessionStatus, get_
 
 logger = logging.getLogger(__name__)
 
-# Boilerplate appended to every agent prompt to prevent context exhaustion
-CONTEXT_BUDGET_RULES = """
+# Boilerplate appended to every agent prompt to ensure quality outcomes
+CODE_QUALITY_RULES = """
 
-CONTEXT BUDGET RULES (MANDATORY):
-- Use Grep/Glob to find specific code - do NOT read entire files unless small (<200 lines)
-- Read only the functions/sections you need to modify
-- Do NOT explore the whole codebase - focus ONLY on your specific task
-- If a file is large, read only the relevant section using offset/limit
-- Write targeted changes, not full file rewrites
-- Limit yourself to the files directly related to your task
+QUALITY OVER SPEED (MANDATORY):
+- The goal is a production-quality codebase, not a fast first draft
+- Read enough of the existing code to understand conventions and patterns before writing
+- If you see duplication, bad patterns, or unclear code while working, REFACTOR IT
+- Do not optimise for 'this session' - optimise for the final codebase someone inherits
+- Prefer fewer, well-designed files over many small scattered ones
+- Write code a senior engineer would approve in a code review
+
+CODE QUALITY RULES:
+- Understand before you change: read enough of the codebase to make informed decisions
+- If the existing code has a pattern, follow it. If the pattern is bad, refactor it.
+- Refactor when it improves clarity, reduces duplication, or makes the code easier to extend
+- Do NOT leave code worse than you found it - clean up what you touch
+- Prefer simple, readable code over clever code
 """
 
 
@@ -826,7 +833,7 @@ After implementation, update records/{task.module}/tasks.md:
 - Mark [x] Implemented
 
 Output what files you created/modified.
-{CONTEXT_BUDGET_RULES}""",
+{CODE_QUALITY_RULES}""",
             agent_type="implementation",
             output_callback=self._stream_output,
         )
@@ -866,7 +873,7 @@ If tests PASS:
 - Update records/{task.module}/tasks.md:
   - Mark [x] Mock tested
   - Mark [x] Integration tested (if applicable)
-{CONTEXT_BUDGET_RULES}""",
+{CODE_QUALITY_RULES}""",
             agent_type="testing",
             output_callback=self._stream_output,
         )
@@ -906,7 +913,7 @@ SUGGESTIONS: (optional improvements)
 
 The Coding Agent MUST fix all MUST_FIX items before proceeding.
 If REVIEW_PASSED is false, this task cannot be marked complete.
-{CONTEXT_BUDGET_RULES}""",
+{CODE_QUALITY_RULES}""",
             agent_type="review",
             output_callback=self._stream_output,
         )
@@ -940,7 +947,7 @@ Review findings:
 You MUST fix ALL items listed under MUST_FIX.
 Do not skip any items. Do not argue with the reviewer.
 Fix each issue and run tests to verify the fix doesn't break anything.
-{CONTEXT_BUDGET_RULES}""",
+{CODE_QUALITY_RULES}""",
                 agent_type="implementation",
                 output_callback=self._stream_output,
             )
@@ -1012,7 +1019,7 @@ LIVE_TESTS_PASSED: true/false (did you actually build and run the artifact?)
 COVERAGE: percentage
 FAILED_TESTS: (list if any)
 INCOMPLETE_TASKS: (list of tasks missing checkboxes)
-{CONTEXT_BUDGET_RULES}""",
+{CODE_QUALITY_RULES}""",
             agent_type="testing",
             output_callback=self._stream_output,
         )
@@ -1067,7 +1074,7 @@ Include ALL of these:
 
 Output a numbered list. Do NOT skip anything. Do NOT summarize or combine.
 If in doubt whether something is a requirement, INCLUDE IT.
-{CONTEXT_BUDGET_RULES}""",
+{CODE_QUALITY_RULES}""",
             agent_type="validation",
             output_callback=self._stream_output,
         )
@@ -1128,7 +1135,7 @@ CRITICAL FAILURES:
 ANY single FAIL = SPEC_COMPLIANCE_RESULT: FAIL
 Do NOT mark [x] Spec compliant on ANY tasks if there are failures.
 UNCHECK [x] Spec compliant on tasks where this audit found failures.
-{CONTEXT_BUDGET_RULES}""",
+{CODE_QUALITY_RULES}""",
             agent_type="validation",
             output_callback=self._stream_output,
         )
@@ -1250,7 +1257,7 @@ REAL_ITEMS: (count of verified real implementations)
 CONCERNS: (any other concerns)
 
 If AUDIT_PASSED is false, list EVERY faked item so it can be fixed.
-{CONTEXT_BUDGET_RULES}""",
+{CODE_QUALITY_RULES}""",
                 agent_type="validation",
                 output_callback=self._stream_output,
             )

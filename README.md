@@ -8,6 +8,7 @@ Beyond Ralph runs **inside Claude Code** as a set of slash commands. It reads yo
 
 ### Key Principles
 
+- **Quality over speed** — Optimise for the final codebase, not for getting through phases quickly. Agents refactor when it helps, understand before they change, and write code a senior engineer would approve.
 - **Three-agent trust model** — Separate agents for coding, testing, and code review. No agent validates its own work.
 - **Adversarial spec compliance** — A dedicated agent verifies every requirement has matching code, going requirement-by-requirement with file:line evidence.
 - **Zero deferral** — "Deferred to v2", "simplified version", "placeholder" = automatic FAIL. If the spec says it, it must be implemented. No exceptions.
