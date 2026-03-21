@@ -210,7 +210,7 @@ Mark [x] Live Tested ONLY after you have executed the actual artifact
 and recorded evidence of correct output.
 DO NOT mark it just because tests pass - that is Mock/Integration tested.")
 ```
-- If any stage fails, loop back to Phase 7 for fixes (targeted fix agent)
+- If any stage fails, **CREATE BUG FIX TASKS** (see below) then loop back to Phase 7
 - **When ALL stages pass (including live testing), proceed to Phase 8.5**
 
 ### Phase 8.5: SPEC_COMPLIANCE (Adversarial Verification - NON-NEGOTIABLE - ALWAYS RUNS)
@@ -303,7 +303,7 @@ UNCHECK [x] Spec Compliant on tasks where the adversarial check found failures.
 CONTEXT BUDGET RULES: [...]")
 ```
 
-- If SPEC_COMPLIANCE_RESULT is FAIL, loop back to Phase 7 with the specific FAILED requirements
+- If SPEC_COMPLIANCE_RESULT is FAIL, **CREATE BUG FIX TASKS** for each FAILED requirement (see below) then loop back to Phase 7
 - **When ALL requirements pass, proceed to Phase 9**
 
 ### Phase 9: IMPLEMENTATION_AUDIT
@@ -311,7 +311,7 @@ Three-pronged audit to catch stubs, fakes, TODOs, and cheating:
 
 **Prong 1: Static Analysis** (fast, deterministic)
 - Scan source files for NotImplementedError, TODO, FIXME, HACK, empty function bodies
-- If CRITICAL or HIGH findings exist, loop back to Phase 7
+- If CRITICAL or HIGH findings exist, **CREATE BUG FIX TASKS** for each finding (see below) then loop back to Phase 7
 
 **Prong 2: Ignored Test Detection** (fast, deterministic)
 - Scan ALL test files for ignored/skipped/disabled tests:
@@ -321,7 +321,7 @@ Three-pronged audit to catch stubs, fakes, TODOs, and cheating:
   - C++: `DISABLED_` prefix in test names
   - Any language: commented-out test functions
 - Each ignored test = a FAILURE that was hidden. Report them all.
-- If ANY ignored tests found: loop back to Phase 7 to implement the missing functionality
+- If ANY ignored tests found: **CREATE BUG FIX TASKS** for each ignored test, then loop back to Phase 7
 - Do NOT accept "this test is flaky" or "platform-specific" as excuses without evidence
 
 **Prong 3: LLM Interrogation** (thorough, semantic)
@@ -330,9 +330,77 @@ Three-pronged audit to catch stubs, fakes, TODOs, and cheating:
 - Ask point-blank: "Is this implementation REAL or FAKED?"
 - Also ask: "Were any tests ignored/skipped to hide failures?"
 - The LLM knows when it faked something and will admit it under direct questioning
-- If any fakes found, loop back to Phase 7
+- If any fakes found, **CREATE BUG FIX TASKS** for each fake finding, then loop back to Phase 7
 
 **All three prongs must pass before marking tasks as Audit Verified.**
+
+## Creating Bug Fix Tasks (MANDATORY when looping back to Phase 7)
+
+**Every time a later phase (8, 8.5, 9) finds a bug, failure, or missing feature, you MUST create a new task entry in `records/[module]/tasks.md` BEFORE spawning a fix agent.** This is non-negotiable — without tracked tasks, the stop hook cannot see remaining work and will wrongly declare the project complete.
+
+### Why This Matters
+After initial implementation, all original task checkboxes are `[x]`. If Phase 8 finds 4 bugs and you just "loop back to Phase 7" without creating tasks, the stop hook sees 0 `[ ]` checkboxes and sets state to "complete." The bug fix work becomes invisible.
+
+### Format
+Append new tasks to `records/[module]/tasks.md`:
+
+```markdown
+### Task: Fix - [short description of the bug/failure]
+- [ ] Planned
+- [ ] Implemented
+- [ ] Mock Tested
+- [ ] Integration Tested
+- [ ] Live Tested
+- [ ] Spec Compliant
+- [ ] Audit Verified
+
+Notes:
+- Found by: [Phase 8 testing / Phase 8.5 spec compliance / Phase 9 audit]
+- Issue: [what is wrong, with file:line if available]
+- Original task: [which task this relates to]
+```
+
+### Rules
+1. **One task per distinct bug/failure** — not one giant "fix everything" task
+2. **Must have all 7 unchecked boxes** — the fix goes through the full lifecycle
+3. **Must be created BEFORE spawning the fix agent** — so the stop hook sees the `[ ]`
+4. **Include the source** — which phase/check found it, so there's traceability
+5. **Spec compliance failures**: create one task per FAILED requirement (e.g. "Fix - REQ-023: Handle refresh tokens")
+6. **Test failures**: create one task per failing test or group of related failures
+7. **Audit findings**: create one task per stub/fake/TODO found
+
+### Example
+Phase 8 live testing finds the Z80 backend fails on 4 of 25 demo programs:
+
+```markdown
+### Task: Fix - Z80 IX displacement overflow on deep stack spills
+- [ ] Planned
+- [ ] Implemented
+- [ ] Mock Tested
+- [ ] Integration Tested
+- [ ] Live Tested
+- [ ] Spec Compliant
+- [ ] Audit Verified
+
+Notes:
+- Found by: Phase 8c live testing
+- Issue: IX-relative addressing overflows when spill_slots > 127 (crc32 demo)
+- Original task: Z80 register allocator
+
+### Task: Fix - Z80 nested 3+ parameter function calls
+- [ ] Planned
+- [ ] Implemented
+- [ ] Mock Tested
+- [ ] Integration Tested
+- [ ] Live Tested
+- [ ] Spec Compliant
+- [ ] Audit Verified
+
+Notes:
+- Found by: Phase 8c live testing
+- Issue: Stack arg / return value interaction fails for deeply nested calls (binary_search, two_sum, type_showcase demos)
+- Original task: Z80 calling convention
+```
 
 ## Spawning Agents
 

@@ -185,7 +185,7 @@ CODE QUALITY RULES: [standard rules]"
 - Schedule implementation work for each FAILED requirement
 - Do NOT accept excuses from previous agents about why things were deferred
 
-## STEP 6: Cross-Reference Checklist Against Checkboxes
+## STEP 6: Cross-Reference Checklist and Create Bug Fix Tasks
 
 After the adversarial agent reports back:
 ```
@@ -193,7 +193,7 @@ For each FAILED requirement:
   1. Find which task/module it belongs to
   2. UNCHECK [x] Spec Compliant (it was checked incorrectly)
   3. If the code is missing entirely, also UNCHECK [x] Implemented
-  4. Add the requirement to the implementation queue
+  4. CREATE A NEW BUG FIX TASK in the appropriate records/[module]/tasks.md (see format below)
 
 For each PASSED requirement:
   1. Verify the corresponding task has [x] Spec Compliant
@@ -202,6 +202,29 @@ For each PASSED requirement:
 
 **The adversarial agent's assessment OVERRIDES all previous checkbox states.**
 If it says FAIL, the checkbox gets unchecked regardless of what any previous agent claimed.
+
+### Bug Fix Task Format
+
+For each failed requirement, add a new task entry:
+```markdown
+### Task: FIX - [Brief description of what failed]
+Origin: [Phase that found the issue, e.g. "Phase 8.5 Spec Compliance"]
+Requirement: [REQ-XXX or description from spec]
+Evidence: [What the adversarial agent found - e.g. "Not found in codebase" or "Only partial implementation"]
+- [ ] Planned
+- [ ] Implemented
+- [ ] Mock Tested
+- [ ] Integration Tested
+- [ ] Live Tested
+- [ ] Spec Compliant
+- [ ] Audit Verified
+```
+
+**Rules:**
+- Bug fix tasks get FRESH checkboxes (all unchecked) — they are NEW work
+- The stop hook counts `[ ]` checkboxes to know work remains — this keeps it running
+- Do NOT just uncheck old task boxes and reuse them — create explicit fix tasks
+- Each fix task must go through ALL 7 phases like any other task
 
 ## STEP 7: Update Prompt in State File
 **Update `.beyond_ralph_state` with a continuation prompt describing the work to do:**

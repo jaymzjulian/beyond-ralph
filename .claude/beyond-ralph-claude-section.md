@@ -37,6 +37,12 @@ This project uses Beyond Ralph (`/beyond-ralph`, `/beyond-ralph-resume`) for aut
 - [ ] Spec Compliant - ADVERSARIAL agent verified EVERY requirement has matching code
 - [ ] Audit Verified - static analysis + LLM interrogation passed (no stubs/fakes/TODOs)
 
+### Bug Fixes Create New Tasks
+- When Phases 8, 8.5, or 9 find issues, create NEW task entries in `records/[module]/tasks.md`
+- Bug fix tasks get FRESH checkboxes (all 7 unchecked) — they are NEW work
+- Do NOT just uncheck old task boxes — create explicit `FIX - [description]` tasks
+- This keeps the stop hook aware that work remains (it counts `[ ]` checkboxes)
+
 ### Agent Autonomy
 - After Phase 2 (Interview), ALL remaining work is FULLY AUTONOMOUS
 - NEVER stop to ask the user "Would you like X or Y?" - just pick and continue
