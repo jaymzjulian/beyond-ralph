@@ -138,10 +138,12 @@ def main() -> None:
         debug_log(f"User-requested stop ({br_state}) - allowing exit")
         allow_exit()
 
-    # Auto-completion states - verify against actual task records
+    # Auto-completion states - verify against actual task records AND stored prompt
     auto_complete_states = ("complete", "done", "finished")
     if br_state in auto_complete_states:
-        # Safety net: if records show incomplete tasks, the auto-completion is wrong
+        # Don't trust checkboxes alone. Check two things:
+        # 1. Are there unchecked task checkboxes? (obvious incomplete work)
+        # 2. Is there a stored prompt describing remaining work? (agents lied about checkboxes)
         actual_incomplete = 0
         records_dir = Path("records")
         if records_dir.exists():
@@ -150,14 +152,23 @@ def main() -> None:
                     actual_incomplete += tf.read_text().count("[ ]")
                 except Exception:
                     continue
-        if actual_incomplete > 0:
-            debug_log(f"State says '{br_state}' but {actual_incomplete} tasks still incomplete - overriding to running")
+
+        stored_prompt = state.get("prompt", "")
+        has_remaining_work = bool(stored_prompt) and "AUTOMATION_COMPLETE" not in stored_prompt
+
+        if actual_incomplete > 0 or has_remaining_work:
+            reason = []
+            if actual_incomplete > 0:
+                reason.append(f"{actual_incomplete} tasks still incomplete")
+            if has_remaining_work:
+                reason.append("stored prompt describes remaining work")
+            debug_log(f"State says '{br_state}' but {' and '.join(reason)} - overriding to running")
             state["state"] = "running"
             br_state = "running"
             state_file.write_text(json.dumps(state, indent=2))
             # Fall through to normal processing below
         else:
-            debug_log(f"Terminal state ({br_state}) - allowing exit")
+            debug_log(f"Terminal state ({br_state}), no incomplete tasks, no stored prompt - allowing exit")
             allow_exit()
 
     # Human wait states - allow exit
@@ -297,11 +308,16 @@ def main() -> None:
     except Exception as e:
         debug_log(f"Quota check error: {e} - continuing without quota gate")
 
-    # incomplete was already counted above (before quota check)
-    if incomplete == 0:
-        debug_log("All tasks complete - allowing exit")
-        state["state"] = "complete"
-        state_file.write_text(json.dumps(state, indent=2))
+    # Check incomplete tasks - but DO NOT trust checkboxes as sole source of truth.
+    # Agents lie about their own work. If all boxes are checked but we have a stored
+    # prompt describing remaining work, the prompt wins.
+    prompt = state.get("prompt", "")
+    if incomplete == 0 and not prompt:
+        # No incomplete tasks AND no stored prompt = likely truly done.
+        # But only AUTOMATION_COMPLETE (which goes through audit gate) should
+        # set state to "complete". Here we just allow exit without forcing "complete"
+        # so that /beyond-ralph-resume can still re-validate.
+        debug_log("All checkboxes checked, no stored prompt - allowing exit (state unchanged)")
         allow_exit()
 
     # === NOT COMPLETE - BLOCK EXIT AND RE-FEED PROMPT ===
@@ -313,8 +329,7 @@ def main() -> None:
     state["last_activity"] = datetime.now(timezone.utc).isoformat()
     state_file.write_text(json.dumps(state, indent=2))
 
-    # Get the stored prompt to re-feed (like ralph-wiggum's PROMPT_TEXT)
-    prompt = state.get("prompt", "")
+    # prompt was already read from state above
 
     # SAFETY: If stored prompt is a stale DECLARATION of completion, discard it.
     # But DON'T discard prompts that merely INSTRUCT Claude to "Output AUTOMATION_COMPLETE
