@@ -27,12 +27,19 @@ def allow_exit() -> None:
     sys.exit(0)
 
 
-def block_exit(prompt: str, iteration: int, incomplete: int) -> None:
+def block_exit(prompt: str, iteration: int, incomplete: int, *, force_msg: str = "") -> None:
     """Block Claude from stopping and re-feed the prompt."""
+    if force_msg:
+        sys_msg = f"\U0001f504 Beyond Ralph iteration {iteration} | {force_msg}"
+    elif incomplete > 0:
+        sys_msg = f"\U0001f504 Beyond Ralph iteration {iteration} | {incomplete} tasks remaining | Output AUTOMATION_COMPLETE when done"
+    else:
+        # No checkbox-incomplete tasks but still blocking = prompt describes remaining work
+        sys_msg = f"\U0001f504 Beyond Ralph iteration {iteration} | WORK REMAINS - read the prompt below and DO THE WORK NOW"
     result = {
         "decision": "block",
         "reason": prompt,
-        "systemMessage": f"\U0001f504 Beyond Ralph iteration {iteration} | {incomplete} tasks remaining | Output AUTOMATION_COMPLETE when done"
+        "systemMessage": sys_msg,
     }
     debug_log(f"Returning block: iteration={iteration}, incomplete={incomplete}")
     debug_log(f"  JSON (first 300): {json.dumps(result)[:300]}...")
@@ -258,6 +265,87 @@ def main() -> None:
                 state["state"] = "paused"
                 state_file.write_text(json.dumps(state, indent=2))
                 allow_exit()
+
+            # === DEFERRAL DETECTION ===
+            # If Claude is listing "remaining work for future sessions" instead of
+            # doing the work, extract the deferred items and force it to act NOW.
+            deferral_phrases = [
+                "future session",
+                "remaining work",
+                "future work",
+                "next session",
+                "later session",
+                "out of scope",
+                "deferred",
+                "follow-up",
+                "follow up session",
+                "not addressed",
+                "beyond current scope",
+            ]
+            last_lower = last_text.lower()
+            found_deferral = any(phrase in last_lower for phrase in deferral_phrases)
+
+            if found_deferral:
+                debug_log("DEFERRAL DETECTED in Claude's response - extracting deferred work")
+                # Extract the deferred items from Claude's response
+                # Look for bullet points, numbered lists, or lines after deferral phrases
+                deferred_items = []
+                in_deferral_section = False
+                for text_line in last_text.split("\n"):
+                    line_lower = text_line.strip().lower()
+                    # Detect start of a deferral list
+                    if any(phrase in line_lower for phrase in deferral_phrases):
+                        in_deferral_section = True
+                        continue
+                    # Collect bullet/numbered items in the deferral section
+                    stripped = text_line.strip()
+                    if in_deferral_section and stripped and (
+                        stripped.startswith("-")
+                        or stripped.startswith("*")
+                        or stripped.startswith("•")
+                        or (len(stripped) > 1 and stripped[0].isdigit() and stripped[1] in ".)")
+                    ):
+                        deferred_items.append(stripped.lstrip("-*•0123456789.) "))
+                    # End section on blank line
+                    elif in_deferral_section and not stripped:
+                        in_deferral_section = False
+
+                if deferred_items:
+                    items_text = "\n".join(f"  - {item}" for item in deferred_items)
+                    deferral_prompt = (
+                        "**DEFERRAL REJECTED** - You listed work as 'remaining for future sessions'. "
+                        "There are NO future sessions. The Zero Deferral Policy is MANDATORY.\n\n"
+                        "You MUST complete ALL of the following work NOW:\n"
+                        f"{items_text}\n\n"
+                        "For each item:\n"
+                        "1. Create a FIX task in the appropriate records/[module]/tasks.md\n"
+                        "2. Spawn an implementation agent to do the work\n"
+                        "3. Verify the work is complete\n\n"
+                        "Do NOT output AUTOMATION_COMPLETE until ALL items above are resolved.\n"
+                        "Do NOT defer anything. Do NOT say 'future session'. DO THE WORK NOW."
+                    )
+                else:
+                    deferral_prompt = (
+                        "**DEFERRAL REJECTED** - You mentioned 'future sessions' or 'remaining work' "
+                        "that you're not completing. There are NO future sessions.\n\n"
+                        "The Zero Deferral Policy is MANDATORY: if work remains, DO IT NOW.\n"
+                        "Re-read records/*/tasks.md and the spec. Find incomplete work. Do it.\n\n"
+                        "Do NOT output AUTOMATION_COMPLETE until ALL work is truly done.\n"
+                        "Do NOT defer anything. DO THE WORK NOW."
+                    )
+
+                # Override the stored prompt with the forceful deferral prompt
+                state["prompt"] = deferral_prompt
+                state["hook_iteration"] = iteration
+                state["last_activity"] = datetime.now(timezone.utc).isoformat()
+                state_file.write_text(json.dumps(state, indent=2))
+                block_exit(
+                    deferral_prompt,
+                    iteration,
+                    incomplete=len(deferred_items) or 1,
+                    force_msg=f"DEFERRAL REJECTED - {len(deferred_items) or 'unknown'} items must be completed NOW",
+                )
+
         except Exception as e:
             debug_log(f"Transcript read error: {e}")
 
