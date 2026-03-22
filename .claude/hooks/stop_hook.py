@@ -419,24 +419,49 @@ def main() -> None:
 
     # prompt was already read from state above
 
-    # SAFETY: If stored prompt is a stale DECLARATION of completion, discard it.
-    # But DON'T discard prompts that merely INSTRUCT Claude to "Output AUTOMATION_COMPLETE
-    # when done" - those are valid orchestrator prompts.
-    # A stale prompt looks like "AUTOMATION_COMPLETE. All planned work is done."
-    # A valid prompt looks like "Output AUTOMATION_COMPLETE only when all N tasks are done."
-    stale_markers = ["All planned work is done", "AUTOMATION_COMPLETE."]
-    if any(marker in prompt for marker in stale_markers):
-        debug_log("Stored prompt is stale (contains completion declaration) - using fallback")
+    # SAFETY: Detect if the stored prompt was POISONED by Claude writing its own
+    # completion message into the state file. A valid orchestrator prompt contains
+    # INSTRUCTIONS (imperative verbs like "Read", "Use", "Spawn", "Output").
+    # A poisoned prompt contains Claude's DECLARATIONS ("Session complete", "All
+    # targets achieved", "work documented").
+    #
+    # Detection strategy: check for known poison patterns. These are phrases Claude
+    # uses when declaring itself done, which should NEVER appear in an orchestrator prompt.
+    poison_markers = [
+        "All planned work is done",
+        "AUTOMATION_COMPLETE.",  # declaration, not instruction
+        "Session complete",
+        "All targets achieved",
+        "All major targets achieved",
+        "work documented",
+        "work is documented",
+        "remaining work for future",
+        "Remaining work documented",
+        "Press Ctrl+C",
+        "stop hook has a bug",
+        "All work done",
+        "All work complete",
+        "All tasks complete",
+        "Nothing left to do",
+        "No remaining work",
+        "Everything is implemented",
+    ]
+    prompt_lower = prompt.lower()
+    if any(marker.lower() in prompt_lower for marker in poison_markers):
+        debug_log(f"POISONED prompt detected (matched poison marker) - discarding: {prompt[:200]}")
         prompt = ""
 
     if not prompt:
-        # Fallback: build a prompt from state if none was stored
+        # Fallback: build a prompt from state if none was stored.
+        # This also fires when a poisoned prompt was discarded above.
         phase = state.get("phase", "unknown")
         # Don't use "complete" as phase in the prompt - it confuses Claude
         if phase in ("complete", "done", "finished"):
             phase = "IMPLEMENTATION"
         spec_path = state.get("spec_path", state.get("spec_file", "SPEC.md"))
-        prompt = f"""You are the Beyond Ralph Orchestrator. You have {incomplete} incomplete tasks.
+
+        if incomplete > 0:
+            prompt = f"""You are the Beyond Ralph Orchestrator. You have {incomplete} incomplete tasks.
 
 Read records/*/tasks.md to find incomplete tasks ([ ] checkboxes).
 Use the Task tool to spawn agents for implementation and testing.
@@ -446,6 +471,27 @@ Continue until ALL tasks have 7/7 checkboxes.
 Phase: {phase} | Spec: {spec_path}
 
 Output AUTOMATION_COMPLETE only when all {incomplete} remaining tasks are done."""
+        else:
+            # All checkboxes checked but we're still here (poisoned prompt was discarded,
+            # or deferral detected). There IS remaining work - Claude just checked all
+            # boxes prematurely. Force it to find and do the work.
+            prompt = f"""**YOUR PREVIOUS COMPLETION CLAIM WAS REJECTED.**
+
+You claimed the work was done, but the stop hook detected remaining/deferred work.
+Do NOT repeat your completion claim. Do NOT say "session complete". Do NOT write
+remaining work to a file and call it done. DO THE ACTUAL WORK.
+
+MANDATORY STEPS:
+1. Read the spec: {spec_path}
+2. Read ALL records/*/tasks.md files
+3. Run the test suite and check for ANY failures
+4. Search the codebase for TODO, FIXME, NotImplementedError, stub, placeholder
+5. If you find incomplete work, create FIX tasks in records/ and spawn agents
+6. If tests fail, fix them — do NOT mark them as ignored/skipped
+
+The Zero Deferral Policy is MANDATORY. There are NO future sessions.
+If ANY work remains, do it NOW. Only output AUTOMATION_COMPLETE when
+you have verified EVERY requirement is fully implemented and all tests pass."""
         # Save the corrected prompt so future iterations use it
         state["prompt"] = prompt
         state["phase"] = phase
