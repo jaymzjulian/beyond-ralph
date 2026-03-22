@@ -40,6 +40,7 @@ cp "$BEYOND_RALPH_ROOT/.claude/commands/beyond-ralph-status.md" "$TARGET_PROJECT
 echo "Copying hooks..."
 cp "$BEYOND_RALPH_ROOT/.claude/hooks/stop_hook.py" "$TARGET_PROJECT/.claude/hooks/"
 cp "$BEYOND_RALPH_ROOT/.claude/hooks/post_compact_hook.py" "$TARGET_PROJECT/.claude/hooks/"
+cp "$BEYOND_RALPH_ROOT/.claude/hooks/audit.py" "$TARGET_PROJECT/.claude/hooks/"
 chmod +x "$TARGET_PROJECT/.claude/hooks/stop_hook.py"
 chmod +x "$TARGET_PROJECT/.claude/hooks/post_compact_hook.py"
 

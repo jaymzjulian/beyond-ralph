@@ -511,7 +511,7 @@ def install_to_project(
 
     # Copy hooks
     console.print("\n[bold]Installing hooks...[/bold]")
-    for hook_name in ["stop_hook.py", "post_compact_hook.py"]:
+    for hook_name in ["stop_hook.py", "post_compact_hook.py", "audit.py"]:
         hook_src = source_hooks / hook_name
         hook_dst = target_hooks / hook_name
         if hook_src.exists():

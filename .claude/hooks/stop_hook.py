@@ -100,12 +100,26 @@ def _run_audit_gate() -> tuple[bool, str]:
     Returns:
         Tuple of (passed: bool, summary: str)
     """
+    # Try 1: audit.py co-located with this hook (copied by install script)
+    try:
+        hook_dir = Path(__file__).parent
+        audit_path = hook_dir / "audit.py"
+        if audit_path.exists():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("audit", audit_path)
+            audit_mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+            spec.loader.exec_module(audit_mod)  # type: ignore[union-attr]
+            return audit_mod.quick_audit_for_hook(Path.cwd())
+    except Exception as e:
+        debug_log(f"Co-located audit.py failed: {e}")
+
+    # Try 2: beyond_ralph package (when running inside the beyond-ralph repo itself)
     try:
         sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
         from beyond_ralph.core.audit import quick_audit_for_hook
         return quick_audit_for_hook(Path.cwd())
     except ImportError:
-        debug_log("Could not import audit module - skipping audit gate")
+        debug_log("No audit module found (not co-located, not in package)")
         return True, "Audit module not available (skipped)"
     except Exception as e:
         debug_log(f"Audit gate error: {e}")
