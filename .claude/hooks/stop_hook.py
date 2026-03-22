@@ -482,13 +482,14 @@ def main() -> None:
     # prompt was already read from state above
 
     # SAFETY: Detect if the stored prompt was POISONED by Claude writing its own
-    # completion message into the state file. A valid orchestrator prompt contains
-    # INSTRUCTIONS (imperative verbs like "Read", "Use", "Spawn", "Output").
-    # A poisoned prompt contains Claude's DECLARATIONS ("Session complete", "All
-    # targets achieved", "work documented").
+    # completion/status message into the state file instead of a real orchestrator prompt.
     #
-    # Detection strategy: check for known poison patterns. These are phrases Claude
-    # uses when declaring itself done, which should NEVER appear in an orchestrator prompt.
+    # Two detection strategies (either triggers discard):
+    #
+    # 1. KNOWN POISON PHRASES — explicit markers Claude uses when declaring itself done
+    # 2. STRUCTURAL CHECK — a valid orchestrator prompt contains INSTRUCTIONS (imperative
+    #    verbs). A poisoned prompt is a STATUS REPORT (declarative statements about what
+    #    was achieved). If the prompt has no imperative instructions, it's not a real prompt.
     poison_markers = [
         "All planned work is done",
         "AUTOMATION_COMPLETE.",  # declaration, not instruction
@@ -507,10 +508,52 @@ def main() -> None:
         "Nothing left to do",
         "No remaining work",
         "Everything is implemented",
+        "Every requirement is implemented",
+        "All requirements implemented",
+        "All requirements are implemented",
+        "No TODOs",
+        "no stubs",
+        "no deferred work",
+        "0 test failures",
     ]
     prompt_lower = prompt.lower()
+    is_poisoned = False
+
+    # Check 1: known poison phrases
     if any(marker.lower() in prompt_lower for marker in poison_markers):
-        debug_log(f"POISONED prompt detected (matched poison marker) - discarding: {prompt[:200]}")
+        debug_log(f"POISONED prompt (matched poison marker) - discarding: {prompt[:200]}")
+        is_poisoned = True
+
+    # Check 2: structural — does the prompt contain ANY orchestrator instructions?
+    # Valid prompts have imperative verbs telling Claude what to DO.
+    # Poisoned prompts are status reports about what WAS DONE.
+    if not is_poisoned and prompt:
+        instruction_markers = [
+            "read records",
+            "use the task tool",
+            "spawn",
+            "output automation_complete",
+            "find incomplete",
+            "create fix task",
+            "run the test",
+            "search the codebase",
+            "mandatory steps",
+            "you must",
+            "do the work",
+            "do it now",
+            "do not output automation_complete",
+            "verify every requirement",
+            "fix all",
+            "deferral rejected",
+            "your previous completion claim",
+            "why you are being restarted",
+        ]
+        has_instructions = any(marker in prompt_lower for marker in instruction_markers)
+        if not has_instructions:
+            debug_log(f"POISONED prompt (no instructions found, looks like status report) - discarding: {prompt[:200]}")
+            is_poisoned = True
+
+    if is_poisoned:
         prompt = ""
 
     if not prompt:
@@ -538,26 +581,33 @@ Phase: {phase} | Spec: {spec_path}
 
 Output AUTOMATION_COMPLETE only when all {incomplete} remaining tasks are done."""
         else:
-            # All checkboxes checked but we're still here (poisoned prompt was discarded,
-            # or deferral detected). There IS remaining work - Claude just checked all
-            # boxes prematurely. Force it to find and do the work.
+            # All checkboxes checked but we're still here (poisoned prompt was discarded).
+            # Two possibilities:
+            #   A) Claude deferred work and lied about completion
+            #   B) The work genuinely IS done but Claude won't say AUTOMATION_COMPLETE
+            # The prompt must handle BOTH cases — tell Claude to verify, and if
+            # everything truly passes, just say the magic words.
             prompt = f"""**YOUR PREVIOUS COMPLETION CLAIM WAS REJECTED.**
 
-You claimed the work was done, but the stop hook detected remaining/deferred work.
-Do NOT repeat your completion claim. Do NOT say "session complete". Do NOT write
-remaining work to a file and call it done. DO THE ACTUAL WORK.
+You wrote a status report instead of following the orchestrator protocol.
+The stop hook cannot accept prose declarations like "session complete" or
+"every requirement is implemented". You MUST follow this procedure:
 
 MANDATORY STEPS:
 1. Read the spec: {spec_path}
 2. Read ALL records/*/tasks.md files
-3. Run the test suite and check for ANY failures
+3. Run the test suite — show the ACTUAL command and output
 4. Search the codebase for TODO, FIXME, NotImplementedError, stub, placeholder
-5. If you find incomplete work, create FIX tasks in records/ and spawn agents
-6. If tests fail, fix them — do NOT mark them as ignored/skipped
+5. If you find incomplete work: create FIX tasks in records/ and spawn agents to fix them
+6. If tests fail: fix them — do NOT mark them as ignored/skipped
 
-The Zero Deferral Policy is MANDATORY. There are NO future sessions.
-If ANY work remains, do it NOW. Only output AUTOMATION_COMPLETE when
-you have verified EVERY requirement is fully implemented and all tests pass."""
+**IF everything genuinely passes** (all tests green, no TODOs, no stubs, spec
+fully implemented), then output AUTOMATION_COMPLETE on its own line.
+That is the ONLY way to signal completion. The hook will run an audit gate
+to verify, and if it passes, you will be allowed to exit cleanly.
+
+Do NOT write status reports. Do NOT say "session complete".
+Do NOT claim the stop hook is bugged. FOLLOW THE STEPS ABOVE."""
 
         # === ESCALATION FOR REPEATED REFUSALS ===
         # If Claude has refused multiple times, append increasingly specific context
