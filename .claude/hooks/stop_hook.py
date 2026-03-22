@@ -196,9 +196,9 @@ def main() -> None:
         allow_exit()
 
     # Check for AUTOMATION_COMPLETE in transcript (like ralph-wiggum checks <promise>)
+    last_text = ""  # Will be populated from transcript if available
     if transcript_path and Path(transcript_path).exists():
         try:
-            last_text = ""
             for line in reversed(Path(transcript_path).read_text().strip().split("\n")):
                 try:
                     msg = json.loads(line)
@@ -349,6 +349,68 @@ def main() -> None:
         except Exception as e:
             debug_log(f"Transcript read error: {e}")
 
+    # === REFUSAL DETECTION ===
+    # Track when Claude repeatedly claims completion instead of doing work.
+    # When it refuses, we escalate — quoting its own words back at it to explain
+    # WHY it's being restarted.
+    if last_text:
+        refusal_phrases = [
+            "session complete",
+            "all work done",
+            "all work complete",
+            "all major targets achieved",
+            "all targets achieved",
+            "nothing left to do",
+            "press ctrl+c",
+            "stop hook has a bug",
+            "stop hook keeps",
+            "remaining work documented",
+            "work documented in memory",
+            "documented in memory",
+        ]
+        last_lower = last_text.lower()
+        is_refusal = any(phrase in last_lower for phrase in refusal_phrases)
+
+        if is_refusal:
+            refusal_count = state.get("refusal_count", 0) + 1
+            state["refusal_count"] = refusal_count
+
+            # Save a summary of what Claude said (truncated) so we can quote it back
+            # Extract the most relevant part — look for lines mentioning remaining/future work
+            relevant_lines = []
+            for text_line in last_text.split("\n"):
+                stripped = text_line.strip()
+                if stripped and any(kw in stripped.lower() for kw in [
+                    "remaining", "future", "not addressed", "todo",
+                    "deferred", "follow-up", "emulator", "operator",
+                    "codegen", "failure", "failing", "broken", "missing",
+                    "incomplete", "partial", "stub", "placeholder",
+                ]):
+                    relevant_lines.append(stripped)
+            # Also grab bullet points that look like work items
+            for text_line in last_text.split("\n"):
+                stripped = text_line.strip()
+                if stripped and stripped.startswith("-") and stripped not in relevant_lines:
+                    # Only include substantive bullets (not dashes in decorative lines)
+                    if len(stripped) > 5:
+                        relevant_lines.append(stripped)
+
+            quoted_text = "\n".join(relevant_lines[:15])  # Cap at 15 lines
+            if not quoted_text:
+                # Fallback: just grab the first meaningful chunk
+                quoted_text = last_text.strip()[:500]
+
+            state["last_refusal_text"] = quoted_text
+            state_file.write_text(json.dumps(state, indent=2))
+            debug_log(f"Refusal #{refusal_count} detected. Relevant text: {quoted_text[:200]}")
+        else:
+            # Claude did something other than refuse — reset the counter
+            if state.get("refusal_count", 0) > 0:
+                debug_log("Claude stopped refusing - resetting refusal counter")
+                state["refusal_count"] = 0
+                state.pop("last_refusal_text", None)
+                state_file.write_text(json.dumps(state, indent=2))
+
     # Count incomplete tasks (needed before quota check for block_exit)
     incomplete = 0
     records_dir = Path("records")
@@ -460,6 +522,10 @@ def main() -> None:
             phase = "IMPLEMENTATION"
         spec_path = state.get("spec_path", state.get("spec_file", "SPEC.md"))
 
+        # Check for repeated refusals — escalate with Claude's own words
+        refusal_count = state.get("refusal_count", 0)
+        last_refusal = state.get("last_refusal_text", "")
+
         if incomplete > 0:
             prompt = f"""You are the Beyond Ralph Orchestrator. You have {incomplete} incomplete tasks.
 
@@ -492,12 +558,52 @@ MANDATORY STEPS:
 The Zero Deferral Policy is MANDATORY. There are NO future sessions.
 If ANY work remains, do it NOW. Only output AUTOMATION_COMPLETE when
 you have verified EVERY requirement is fully implemented and all tests pass."""
+
+        # === ESCALATION FOR REPEATED REFUSALS ===
+        # If Claude has refused multiple times, append increasingly specific context
+        # explaining WHY it is being restarted, quoting its own words.
+        if refusal_count >= 2 and last_refusal:
+            prompt += f"""
+
+**WHY YOU ARE BEING RESTARTED (refusal #{refusal_count}):**
+You keep claiming the work is done, but in your OWN responses you mentioned
+remaining/incomplete work. Here is what YOU said:
+
+---
+{last_refusal}
+---
+
+That is work YOU identified. You are expected to DO that work, not document
+it for "future sessions". There are no future sessions. This IS the session.
+
+Stop declaring completion and START WORKING on the items listed above.
+Spawn implementation agents for each item. Verify the fixes. Then — and
+ONLY then — output AUTOMATION_COMPLETE."""
+        elif refusal_count >= 2:
+            prompt += f"""
+
+**WHY YOU ARE BEING RESTARTED (refusal #{refusal_count}):**
+You have claimed completion {refusal_count} times and been rejected each time.
+The stop hook will NOT let you exit until the work is actually done.
+
+Repeating "session complete" will not work. The hook will keep restarting you.
+The ONLY way to exit is to:
+1. Actually find and complete all remaining work
+2. Output AUTOMATION_COMPLETE (which triggers an audit gate)
+
+Stop refusing. Start working."""
         # Save the corrected prompt so future iterations use it
         state["prompt"] = prompt
         state["phase"] = phase
         state_file.write_text(json.dumps(state, indent=2))
 
-    block_exit(prompt, iteration, incomplete)
+    # Build force_msg with refusal context if applicable
+    refusal_count = state.get("refusal_count", 0)
+    force_msg = ""
+    if refusal_count >= 2:
+        force_msg = f"REFUSAL #{refusal_count} REJECTED — you said there is remaining work, DO IT NOW"
+
+    block_exit(prompt, iteration, incomplete, force_msg=force_msg)
 
 
 if __name__ == "__main__":
