@@ -127,6 +127,15 @@ Update records/[module]/tasks.md checkboxes when done."
 
 **CRITICAL: One agent per TASK, not per MODULE.** Large modules MUST be broken into individual tasks. If a single agent tries to implement an entire large module, it WILL exhaust its context window and die.
 
+**CRITICAL: ALL WORK GOES THROUGH THE CHECKBOX WORKFLOW. NO EXCEPTIONS.**
+- Every piece of implementation work MUST have a task entry in `records/[module]/tasks.md`
+- Every task MUST go through ALL 7 checkboxes: Planned → Implemented → Mock Tested → Integration Tested → Live Tested → Spec Compliant → Audit Verified
+- Do NOT implement changes "directly" and skip the workflow
+- Do NOT check boxes retroactively — if the work wasn't done through the workflow, it doesn't count
+- Do NOT claim "the work IS done, the checkboxes just aren't checked" — unchecked boxes = incomplete work
+- If you discover new work mid-implementation, CREATE A NEW TASK for it before doing it
+- The stop hook counts `[ ]` checkboxes to determine if work remains — skipping the workflow breaks autonomy
+
 - Track progress in `records/[module]/tasks.md`
 - **After ALL tasks implemented, proceed to Phase 8**
 

@@ -37,6 +37,15 @@ This project uses Beyond Ralph (`/beyond-ralph`, `/beyond-ralph-resume`) for aut
 - [ ] Spec Compliant - ADVERSARIAL agent verified EVERY requirement has matching code
 - [ ] Audit Verified - static analysis + LLM interrogation passed (no stubs/fakes/TODOs)
 
+### ALL Work Goes Through The Checkbox Workflow (MANDATORY)
+- Every piece of work MUST have a task entry in `records/[module]/tasks.md` with 7 checkboxes
+- Every task MUST go through ALL 7 phases: Planned → Implemented → Mock Tested → Integration Tested → Live Tested → Spec Compliant → Audit Verified
+- Do NOT implement changes "directly" and skip the workflow
+- Do NOT check boxes retroactively — if the work wasn't done through the workflow, it doesn't count
+- "The work IS done, the checkboxes just aren't checked" = **the work is NOT done**
+- If you discover new work mid-implementation, CREATE A NEW TASK before doing it
+- The stop hook counts `[ ]` checkboxes — skipping the workflow breaks autonomous operation
+
 ### Bug Fixes Create New Tasks
 - When Phases 8, 8.5, or 9 find issues, create NEW task entries in `records/[module]/tasks.md`
 - Bug fix tasks get FRESH checkboxes (all 7 unchecked) — they are NEW work
