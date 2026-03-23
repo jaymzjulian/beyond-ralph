@@ -136,8 +136,10 @@ def main() -> None:
 
     stop_hook_active = hook_input.get("stop_hook_active", False)
     transcript_path = hook_input.get("transcript_path", "")
+    # last_assistant_message is the direct way to get Claude's last response
+    last_assistant_message = hook_input.get("last_assistant_message", "")
 
-    debug_log(f"Stop hook invoked (stop_hook_active={stop_hook_active})")
+    debug_log(f"Stop hook invoked (stop_hook_active={stop_hook_active}, has_last_msg={bool(last_assistant_message)}, keys={list(hook_input.keys())})")
 
     # Check if Beyond Ralph state file exists
     state_file = Path(".beyond_ralph_state")
@@ -209,9 +211,10 @@ def main() -> None:
         state_file.write_text(json.dumps(state, indent=2))
         allow_exit()
 
-    # Check for AUTOMATION_COMPLETE in transcript (like ralph-wiggum checks <promise>)
-    last_text = ""  # Will be populated from transcript if available
-    if transcript_path and Path(transcript_path).exists():
+    # Get Claude's last response — prefer last_assistant_message (direct from Claude Code),
+    # fall back to transcript parsing if not available.
+    last_text = last_assistant_message
+    if not last_text and transcript_path and Path(transcript_path).exists():
         try:
             for line in reversed(Path(transcript_path).read_text().strip().split("\n")):
                 try:
@@ -224,141 +227,143 @@ def main() -> None:
                         break
                 except (json.JSONDecodeError, KeyError):
                     continue
+        except Exception as e:
+            debug_log(f"Transcript read error: {e}")
 
-            # Check if Claude intentionally declared completion.
-            # Must be a standalone declaration, NOT just mentioning the phrase
-            # in instructions like "Output AUTOMATION_COMPLETE when done".
-            # Look for it at the start of a line or as a standalone statement.
-            is_real_completion = False
-            for text_line in last_text.split("\n"):
-                stripped = text_line.strip()
-                # Must START with AUTOMATION_COMPLETE (not "Output AUTOMATION_COMPLETE")
-                if stripped.startswith("AUTOMATION_COMPLETE"):
-                    is_real_completion = True
-                    break
+    if last_text:
+        debug_log(f"Last response (first 200): {last_text[:200]}")
 
-            if is_real_completion:
-                debug_log("Found AUTOMATION_COMPLETE declaration - running audit gate...")
-                # AUDIT GATE: Run static analysis before accepting completion.
-                # If the audit module isn't installed (normal for target projects),
-                # pass the gate — the real verification is Phase 8.5 adversarial
-                # spec compliance, not this hook-level check.
-                audit_passed, audit_summary = _run_audit_gate()
+        # Check if Claude intentionally declared completion.
+        # Must be a standalone declaration, NOT just mentioning the phrase
+        # in instructions like "Output AUTOMATION_COMPLETE when done".
+        # Look for it at the start of a line or as a standalone statement.
+        is_real_completion = False
+        for text_line in last_text.split("\n"):
+            stripped = text_line.strip()
+            # Must START with AUTOMATION_COMPLETE (not "Output AUTOMATION_COMPLETE")
+            if stripped.startswith("AUTOMATION_COMPLETE"):
+                is_real_completion = True
+                break
 
-                if not audit_passed:
-                    debug_log(f"Audit gate BLOCKED completion: {audit_summary}")
-                    # Don't allow exit - force continuation with audit findings
-                    audit_prompt = state.get("prompt", "")
-                    if audit_prompt:
-                        audit_prompt += (
-                            f"\n\n**AUDIT GATE FAILED** - Cannot accept AUTOMATION_COMPLETE.\n"
-                            f"{audit_summary}\n"
-                            f"Fix ALL findings before declaring complete."
-                        )
-                    else:
-                        audit_prompt = (
-                            f"AUDIT GATE FAILED: {audit_summary}\n"
-                            f"Fix all stubs, TODOs, and fake implementations, "
-                            f"then output AUTOMATION_COMPLETE."
-                        )
-                    state["hook_iteration"] = iteration
-                    state["last_activity"] = datetime.now(timezone.utc).isoformat()
-                    state_file.write_text(json.dumps(state, indent=2))
-                    block_exit(audit_prompt, iteration, incomplete=1)
-                else:
-                    debug_log(f"Audit gate passed: {audit_summary}")
-                    state["state"] = "complete"
-                    state_file.write_text(json.dumps(state, indent=2))
-                    allow_exit()
+        if is_real_completion:
+            debug_log("Found AUTOMATION_COMPLETE declaration - running audit gate...")
+            # AUDIT GATE: Run static analysis before accepting completion.
+            # If the audit module isn't installed (normal for target projects),
+            # pass the gate — the real verification is Phase 8.5 adversarial
+            # spec compliance, not this hook-level check.
+            audit_passed, audit_summary = _run_audit_gate()
 
-            if "PAUSED_FOR_QUOTA" in last_text or "QUOTA_LIMIT_REACHED" in last_text:
-                debug_log("Found quota pause signal - allowing exit")
-                state["state"] = "paused"
-                state_file.write_text(json.dumps(state, indent=2))
-                allow_exit()
-
-            # === DEFERRAL DETECTION ===
-            # If Claude is listing "remaining work for future sessions" instead of
-            # doing the work, extract the deferred items and force it to act NOW.
-            deferral_phrases = [
-                "future session",
-                "remaining work",
-                "future work",
-                "next session",
-                "later session",
-                "out of scope",
-                "deferred",
-                "follow-up",
-                "follow up session",
-                "not addressed",
-                "beyond current scope",
-            ]
-            last_lower = last_text.lower()
-            found_deferral = any(phrase in last_lower for phrase in deferral_phrases)
-
-            if found_deferral:
-                debug_log("DEFERRAL DETECTED in Claude's response - extracting deferred work")
-                # Extract the deferred items from Claude's response
-                # Look for bullet points, numbered lists, or lines after deferral phrases
-                deferred_items = []
-                in_deferral_section = False
-                for text_line in last_text.split("\n"):
-                    line_lower = text_line.strip().lower()
-                    # Detect start of a deferral list
-                    if any(phrase in line_lower for phrase in deferral_phrases):
-                        in_deferral_section = True
-                        continue
-                    # Collect bullet/numbered items in the deferral section
-                    stripped = text_line.strip()
-                    if in_deferral_section and stripped and (
-                        stripped.startswith("-")
-                        or stripped.startswith("*")
-                        or stripped.startswith("•")
-                        or (len(stripped) > 1 and stripped[0].isdigit() and stripped[1] in ".)")
-                    ):
-                        deferred_items.append(stripped.lstrip("-*•0123456789.) "))
-                    # End section on blank line
-                    elif in_deferral_section and not stripped:
-                        in_deferral_section = False
-
-                if deferred_items:
-                    items_text = "\n".join(f"  - {item}" for item in deferred_items)
-                    deferral_prompt = (
-                        "**DEFERRAL REJECTED** - You listed work as 'remaining for future sessions'. "
-                        "There are NO future sessions. The Zero Deferral Policy is MANDATORY.\n\n"
-                        "You MUST complete ALL of the following work NOW:\n"
-                        f"{items_text}\n\n"
-                        "For each item:\n"
-                        "1. Create a FIX task in the appropriate records/[module]/tasks.md\n"
-                        "2. Spawn an implementation agent to do the work\n"
-                        "3. Verify the work is complete\n\n"
-                        "Do NOT output AUTOMATION_COMPLETE until ALL items above are resolved.\n"
-                        "Do NOT defer anything. Do NOT say 'future session'. DO THE WORK NOW."
+            if not audit_passed:
+                debug_log(f"Audit gate BLOCKED completion: {audit_summary}")
+                # Don't allow exit - force continuation with audit findings
+                audit_prompt = state.get("prompt", "")
+                if audit_prompt:
+                    audit_prompt += (
+                        f"\n\n**AUDIT GATE FAILED** - Cannot accept AUTOMATION_COMPLETE.\n"
+                        f"{audit_summary}\n"
+                        f"Fix ALL findings before declaring complete."
                     )
                 else:
-                    deferral_prompt = (
-                        "**DEFERRAL REJECTED** - You mentioned 'future sessions' or 'remaining work' "
-                        "that you're not completing. There are NO future sessions.\n\n"
-                        "The Zero Deferral Policy is MANDATORY: if work remains, DO IT NOW.\n"
-                        "Re-read records/*/tasks.md and the spec. Find incomplete work. Do it.\n\n"
-                        "Do NOT output AUTOMATION_COMPLETE until ALL work is truly done.\n"
-                        "Do NOT defer anything. DO THE WORK NOW."
+                    audit_prompt = (
+                        f"AUDIT GATE FAILED: {audit_summary}\n"
+                        f"Fix all stubs, TODOs, and fake implementations, "
+                        f"then output AUTOMATION_COMPLETE."
                     )
-
-                # Override the stored prompt with the forceful deferral prompt
-                state["prompt"] = deferral_prompt
                 state["hook_iteration"] = iteration
                 state["last_activity"] = datetime.now(timezone.utc).isoformat()
                 state_file.write_text(json.dumps(state, indent=2))
-                block_exit(
-                    deferral_prompt,
-                    iteration,
-                    incomplete=len(deferred_items) or 1,
-                    force_msg=f"DEFERRAL REJECTED - {len(deferred_items) or 'unknown'} items must be completed NOW",
+                block_exit(audit_prompt, iteration, incomplete=1)
+            else:
+                debug_log(f"Audit gate passed: {audit_summary}")
+                state["state"] = "complete"
+                state_file.write_text(json.dumps(state, indent=2))
+                allow_exit()
+
+        if "PAUSED_FOR_QUOTA" in last_text or "QUOTA_LIMIT_REACHED" in last_text:
+            debug_log("Found quota pause signal - allowing exit")
+            state["state"] = "paused"
+            state_file.write_text(json.dumps(state, indent=2))
+            allow_exit()
+
+        # === DEFERRAL DETECTION ===
+        # If Claude is listing "remaining work for future sessions" instead of
+        # doing the work, extract the deferred items and force it to act NOW.
+        deferral_phrases = [
+            "future session",
+            "remaining work",
+            "future work",
+            "next session",
+            "later session",
+            "out of scope",
+            "deferred",
+            "follow-up",
+            "follow up session",
+            "not addressed",
+            "beyond current scope",
+        ]
+        last_lower = last_text.lower()
+        found_deferral = any(phrase in last_lower for phrase in deferral_phrases)
+
+        if found_deferral:
+            debug_log("DEFERRAL DETECTED in Claude's response - extracting deferred work")
+            # Extract the deferred items from Claude's response
+            # Look for bullet points, numbered lists, or lines after deferral phrases
+            deferred_items = []
+            in_deferral_section = False
+            for text_line in last_text.split("\n"):
+                line_lower = text_line.strip().lower()
+                # Detect start of a deferral list
+                if any(phrase in line_lower for phrase in deferral_phrases):
+                    in_deferral_section = True
+                    continue
+                # Collect bullet/numbered items in the deferral section
+                stripped = text_line.strip()
+                if in_deferral_section and stripped and (
+                    stripped.startswith("-")
+                    or stripped.startswith("*")
+                    or stripped.startswith("•")
+                    or (len(stripped) > 1 and stripped[0].isdigit() and stripped[1] in ".)")
+                ):
+                    deferred_items.append(stripped.lstrip("-*•0123456789.) "))
+                # End section on blank line
+                elif in_deferral_section and not stripped:
+                    in_deferral_section = False
+
+            if deferred_items:
+                items_text = "\n".join(f"  - {item}" for item in deferred_items)
+                deferral_prompt = (
+                    "**DEFERRAL REJECTED** - You listed work as 'remaining for future sessions'. "
+                    "There are NO future sessions. The Zero Deferral Policy is MANDATORY.\n\n"
+                    "You MUST complete ALL of the following work NOW:\n"
+                    f"{items_text}\n\n"
+                    "For each item:\n"
+                    "1. Create a FIX task in the appropriate records/[module]/tasks.md\n"
+                    "2. Spawn an implementation agent to do the work\n"
+                    "3. Verify the work is complete\n\n"
+                    "Do NOT output AUTOMATION_COMPLETE until ALL items above are resolved.\n"
+                    "Do NOT defer anything. Do NOT say 'future session'. DO THE WORK NOW."
+                )
+            else:
+                deferral_prompt = (
+                    "**DEFERRAL REJECTED** - You mentioned 'future sessions' or 'remaining work' "
+                    "that you're not completing. There are NO future sessions.\n\n"
+                    "The Zero Deferral Policy is MANDATORY: if work remains, DO IT NOW.\n"
+                    "Re-read records/*/tasks.md and the spec. Find incomplete work. Do it.\n\n"
+                    "Do NOT output AUTOMATION_COMPLETE until ALL work is truly done.\n"
+                    "Do NOT defer anything. DO THE WORK NOW."
                 )
 
-        except Exception as e:
-            debug_log(f"Transcript read error: {e}")
+            # Override the stored prompt with the forceful deferral prompt
+            state["prompt"] = deferral_prompt
+            state["hook_iteration"] = iteration
+            state["last_activity"] = datetime.now(timezone.utc).isoformat()
+            state_file.write_text(json.dumps(state, indent=2))
+            block_exit(
+                deferral_prompt,
+                iteration,
+                incomplete=len(deferred_items) or 1,
+                force_msg=f"DEFERRAL REJECTED - {len(deferred_items) or 'unknown'} items must be completed NOW",
+            )
 
     # === REFUSAL DETECTION ===
     # Track when Claude repeatedly claims completion instead of doing work.
