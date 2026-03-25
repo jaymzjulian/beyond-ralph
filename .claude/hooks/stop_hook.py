@@ -52,7 +52,8 @@ def _check_quota_api() -> tuple[float | None, float]:
     """Check quota via Anthropic OAuth usage API (self-contained, no imports).
 
     Returns:
-        Tuple of (session_percent, weekly_percent). session_percent is None if check failed.
+        Tuple of (session_percent, weekly_percent). session_percent is None if check failed
+        (but NOT for 429 — a 429 means quota IS exhausted and returns (100, 100)).
     """
     import urllib.request
     import urllib.error
@@ -81,6 +82,14 @@ def _check_quota_api() -> tuple[float | None, float]:
         )
         resp = urllib.request.urlopen(req, timeout=10)
         data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # 429 = Too Many Requests = we ARE rate limited. This is NOT "unknown" —
+        # it's definitive proof that quota is exhausted. Return 100% to trigger pause.
+        if e.code == 429:
+            debug_log("Quota API returned 429 (rate limited) - treating as quota exhausted")
+            return 100.0, 100.0
+        debug_log(f"Quota API HTTP error: {e}")
+        return None, 0
     except Exception as e:
         debug_log(f"Quota API error: {e}")
         return None, 0
@@ -155,8 +164,8 @@ def main() -> None:
 
     br_state = state.get("state", "unknown")
 
-    # User-requested stop states - always respect these (never override)
-    user_stop_states = ("stopped", "cancelled", "error")
+    # User-requested stop states and paused - always respect these (never override)
+    user_stop_states = ("stopped", "cancelled", "error", "paused")
     if br_state in user_stop_states:
         debug_log(f"User-requested stop ({br_state}) - allowing exit")
         allow_exit()
@@ -437,40 +446,21 @@ def main() -> None:
             except Exception:
                 continue
 
-    # Check quota via API - if limited, block exit and tell Claude to wait for reset
+    # Check quota via API - if limited, ALLOW EXIT (pause) so we don't loop.
+    # Claude can't do work when rate-limited, so blocking just wastes iterations.
+    # The user can resume later with /beyond-ralph-resume.
     try:
         session_pct, weekly_pct = _check_quota_api()
         if session_pct is not None and (session_pct >= 85 or weekly_pct >= 85):
-            debug_log(f"Quota limited ({session_pct}%/{weekly_pct}%) - blocking to wait")
+            debug_log(f"Quota limited ({session_pct}%/{weekly_pct}%) - PAUSING (allowing exit)")
             state["hook_iteration"] = iteration
-            state["state"] = "waiting_for_quota"
+            state["state"] = "paused"
+            state["pause_reason"] = f"quota_limited: session={session_pct}%, weekly={weekly_pct}%"
             state["last_activity"] = datetime.now(timezone.utc).isoformat()
             state_file.write_text(json.dumps(state, indent=2))
-            # Block exit with a prompt that tells Claude to wait and recheck
-            quota_prompt = (
-                f"QUOTA LIMITED: session={session_pct}%, weekly={weekly_pct}%.\n"
-                f"You MUST wait for quota to reset before continuing.\n\n"
-                f"Run this Python snippet to poll until quota is available:\n"
-                f"```python\n"
-                f"import time, json, urllib.request\n"
-                f"creds = json.loads(open('{Path.home()}/.claude/.credentials.json').read())\n"
-                f"token = creds['claudeAiOauth']['accessToken']\n"
-                f"while True:\n"
-                f"    time.sleep(600)  # Check every 10 minutes\n"
-                f"    req = urllib.request.Request('https://api.anthropic.com/api/oauth/usage',\n"
-                f"        headers={{'Authorization': f'Bearer {{token}}', 'anthropic-beta': 'oauth-2025-04-20'}})\n"
-                f"    data = json.loads(urllib.request.urlopen(req, timeout=10).read())\n"
-                f"    s = data.get('five_hour', {{}}).get('utilization', 0) or 0\n"
-                f"    w = data.get('seven_day', {{}}).get('utilization', 0) or 0\n"
-                f"    print(f'Quota check: session={{s}}%, weekly={{w}}%')\n"
-                f"    if s < 85 and w < 85:\n"
-                f"        print('Quota available! Resuming...')\n"
-                f"        break\n"
-                f"```\n\n"
-                f"After quota resets, continue with the original task from the state file prompt.\n"
-                f"Do NOT output AUTOMATION_COMPLETE. Do NOT pause. Resume work."
-            )
-            block_exit(quota_prompt, iteration, incomplete)
+            # Let Claude exit cleanly — it can't do work at quota limit anyway.
+            # User resumes with /beyond-ralph-resume when quota resets.
+            allow_exit()
     except Exception as e:
         debug_log(f"Quota check error: {e} - continuing without quota gate")
 
