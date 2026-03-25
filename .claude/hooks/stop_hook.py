@@ -446,23 +446,60 @@ def main() -> None:
             except Exception:
                 continue
 
-    # Check quota via API - if limited, ALLOW EXIT (pause) so we don't loop.
-    # Claude can't do work when rate-limited, so blocking just wastes iterations.
-    # The user can resume later with /beyond-ralph-resume.
+    # Check quota via API - if limited, tell Claude to sleep 10 minutes then retry.
+    # We can't sleep in the hook (30s timeout), so we block exit with a prompt that
+    # makes Claude run `sleep 600`, then the hook fires again and rechecks quota.
+    # This keeps the session alive and auto-resumes when quota resets.
     try:
         session_pct, weekly_pct = _check_quota_api()
         if session_pct is not None and (session_pct >= 85 or weekly_pct >= 85):
-            debug_log(f"Quota limited ({session_pct}%/{weekly_pct}%) - PAUSING (allowing exit)")
+            quota_wait_count = state.get("quota_wait_count", 0) + 1
             state["hook_iteration"] = iteration
-            state["state"] = "paused"
+            state["state"] = "waiting_for_quota"
+            state["quota_wait_count"] = quota_wait_count
             state["pause_reason"] = f"quota_limited: session={session_pct}%, weekly={weekly_pct}%"
             state["last_activity"] = datetime.now(timezone.utc).isoformat()
+
+            # After 36 waits (6 hours), give up and pause for real
+            if quota_wait_count > 36:
+                debug_log(f"Quota limited for {quota_wait_count} cycles (~6 hours) - pausing for real")
+                state["state"] = "paused"
+                state_file.write_text(json.dumps(state, indent=2))
+                allow_exit()
+
             state_file.write_text(json.dumps(state, indent=2))
-            # Let Claude exit cleanly — it can't do work at quota limit anyway.
-            # User resumes with /beyond-ralph-resume when quota resets.
-            allow_exit()
+            debug_log(
+                f"Quota limited ({session_pct}%/{weekly_pct}%) - "
+                f"telling Claude to sleep 10 min (wait #{quota_wait_count})"
+            )
+            quota_prompt = (
+                f"QUOTA LIMITED: session={session_pct}%, weekly={weekly_pct}% "
+                f"(wait #{quota_wait_count}/36).\n\n"
+                f"Run this command to wait for quota reset, then continue:\n"
+                f"```bash\n"
+                f"echo 'Waiting 10 minutes for quota reset...' && sleep 600 && "
+                f"echo 'Resuming work'\n"
+                f"```\n\n"
+                f"After the sleep completes, continue with your Beyond Ralph "
+                f"orchestration work. Read records/*/tasks.md and resume."
+            )
+            block_exit(
+                quota_prompt,
+                iteration,
+                incomplete,
+                force_msg=f"QUOTA LIMITED - sleeping 10 min (wait #{quota_wait_count}/36)",
+            )
     except Exception as e:
         debug_log(f"Quota check error: {e} - continuing without quota gate")
+
+    # If we got past the quota check (quota OK or unknown), reset wait counter
+    if state.get("quota_wait_count", 0) > 0:
+        debug_log("Quota OK - resetting wait counter")
+        state["quota_wait_count"] = 0
+        state.pop("pause_reason", None)
+        if state.get("state") == "waiting_for_quota":
+            state["state"] = "running"
+        state_file.write_text(json.dumps(state, indent=2))
 
     # Check incomplete tasks - but DO NOT trust checkboxes as sole source of truth.
     # Agents lie about their own work. If all boxes are checked but we have a stored
